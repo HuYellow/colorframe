@@ -154,19 +154,28 @@ button:disabled {
 .preview-canvas {
   align-items: center;
   background: #ffffff;
+  cursor: grab;
   display: flex;
   flex: 1;
   justify-content: center;
   min-height: 0;
   padding: 28px;
+  touch-action: none;
+  user-select: none;
+}
+
+.preview-canvas:active {
+  cursor: grabbing;
 }
 
 .preview-canvas img {
+  -webkit-user-drag: none;
   border-radius: 4px;
   box-shadow: 0 32px 80px rgb(33 29 24 / 0.25);
   max-height: min(74vh, 760px);
   max-width: 100%;
   object-fit: contain;
+  pointer-events: none;
 }
 
 .empty-preview {
@@ -405,6 +414,41 @@ button:disabled {
   border: 1px solid #eee8df;
   border-radius: 8px;
   padding: 10px;
+}
+
+.composition-card {
+  background: #fbf8f2;
+  border: 1px solid #eee8df;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px;
+}
+
+.composition-title {
+  align-items: center;
+  display: flex;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  justify-content: space-between;
+}
+
+.composition-title span {
+  color: #4d4338;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.composition-title button {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: #211d18;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 32px;
+  padding: 0 10px;
 }
 
 .field input[type='range'] {

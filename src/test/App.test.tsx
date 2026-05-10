@@ -431,4 +431,87 @@ describe('ColorFrame app', () => {
       }),
     );
   });
+
+  it('auto regenerates the selected photo with composition controls', async () => {
+    vi.useFakeTimers();
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId('photo-upload'), {
+      target: { files: [new File(['image-a'], 'a.png', { type: 'image/png' })] },
+    });
+    fireEvent.change(screen.getByTestId('photo-scale-input'), { target: { value: '1.5' } });
+    fireEvent.change(screen.getByTestId('photo-offset-x-input'), { target: { value: '25' } });
+    fireEvent.change(screen.getByTestId('photo-offset-y-input'), { target: { value: '-40' } });
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    expect(mocks.renderFramedImage).toHaveBeenCalledTimes(1);
+    expect(mocks.renderFramedImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        photoTransform: { scale: 1.5, offsetX: 25, offsetY: -40 },
+      }),
+    );
+  });
+
+  it('keeps composition settings local to the selected photo and resets them', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.upload(screen.getByTestId('photo-upload'), [
+      new File(['image-a'], 'a.png', { type: 'image/png' }),
+      new File(['image-b'], 'b.jpg', { type: 'image/jpeg' }),
+    ]);
+    await waitFor(() => expect(mocks.renderFramedImage).toHaveBeenCalledTimes(2));
+
+    await user.click(screen.getByRole('button', { name: /^a\.png/i }));
+    fireEvent.change(screen.getByTestId('photo-scale-input'), { target: { value: '0.5' } });
+    fireEvent.change(screen.getByTestId('photo-offset-x-input'), { target: { value: '60' } });
+    fireEvent.change(screen.getByTestId('photo-offset-y-input'), { target: { value: '-20' } });
+
+    expect(screen.getByTestId('photo-scale-input')).toHaveValue('0.5');
+    expect(screen.getByTestId('photo-offset-x-input')).toHaveValue('60');
+    expect(screen.getByTestId('photo-offset-y-input')).toHaveValue('-20');
+
+    await user.click(screen.getByRole('button', { name: /^b\.jpg/i }));
+
+    expect(screen.getByTestId('photo-scale-input')).toHaveValue('1');
+    expect(screen.getByTestId('photo-offset-x-input')).toHaveValue('0');
+    expect(screen.getByTestId('photo-offset-y-input')).toHaveValue('0');
+
+    await user.click(screen.getByRole('button', { name: /^a\.png/i }));
+    await user.click(screen.getByTestId('photo-transform-reset'));
+
+    expect(screen.getByTestId('photo-scale-input')).toHaveValue('1');
+    expect(screen.getByTestId('photo-offset-x-input')).toHaveValue('0');
+    expect(screen.getByTestId('photo-offset-y-input')).toHaveValue('0');
+  });
+
+  it('updates composition offsets when dragging the preview', async () => {
+    vi.useFakeTimers();
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId('photo-upload'), {
+      target: { files: [new File(['image-a'], 'a.png', { type: 'image/png' })] },
+    });
+    const previewCanvas = screen.getByTestId('preview-canvas');
+    fireEvent.pointerDown(previewCanvas, { button: 0, clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(previewCanvas, { clientX: 130, clientY: 80, pointerId: 1 });
+
+    expect(screen.getByTestId('photo-offset-x-input')).toHaveValue('12');
+    expect(screen.getByTestId('photo-offset-y-input')).toHaveValue('-8');
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    expect(mocks.renderFramedImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        photoTransform: { scale: 1, offsetX: 12, offsetY: -8 },
+      }),
+    );
+  });
 });

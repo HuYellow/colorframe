@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { BatchJob, FrameTemplate, PhotoFrameSettings } from './types';
+import type { BatchJob, FrameTemplate, PhotoFrameSettings, PhotoTransform } from './types';
 import { analyzeImage } from './utils/imageAnalysis';
 import { createBatchJobs, summarizeJobs } from './utils/batch';
 import {
@@ -30,10 +30,20 @@ import { renderFramedImage } from './utils/renderer';
 import { createSmartCaption } from './utils/smartCaption';
 import { createDefaultTemplate } from './utils/template';
 import { createThemeWithFrameColor } from './utils/color';
+import {
+  PHOTO_OFFSET_MAX,
+  PHOTO_OFFSET_MIN,
+  PHOTO_SCALE_MAX,
+  PHOTO_SCALE_MIN,
+  createDefaultPhotoTransform,
+  normalizePhotoTransform,
+} from './utils/photoTransform';
 
 const DEFAULT_PALETTE = ['#9f7355', '#335577', '#d9b46f', '#1f2d2b', '#efe1ce'];
 const FIXED_FRAME_COLORS = ['#ffffff', '#000000'];
 const AUTO_GENERATE_DELAY_MS = 500;
+const PREVIEW_DRAG_OFFSET_PER_PX = 0.4;
+const PREVIEW_DRAG_MIN_PX = 2;
 
 function App() {
   const [jobs, setJobs] = useState<BatchJob[]>([]);
@@ -62,6 +72,7 @@ function App() {
   const summary = useMemo(() => summarizeJobs(jobs), [jobs]);
   const selectedJob = jobs.find((job) => job.id === selectedId) ?? jobs[0];
   const selectedFrameTemplate = selectedJob ? getJobFrameTemplate(selectedJob, template) : template;
+  const selectedPhotoTransform = normalizePhotoTransform(selectedJob?.photoTransform);
   const doneJobs = jobs.filter((job) => job.status === 'done' && job.outputBlob);
   const downloadableSelectedJob = selectedJob?.status === 'done' && selectedJob.outputBlob ? selectedJob : undefined;
   const shareFiles = useMemo(() => doneJobs.map((job) => toShareFile(job, template)), [doneJobs, template]);
@@ -233,6 +244,7 @@ function App() {
           theme,
           mode: 'export',
           photoText: jobBeforeRender.customText,
+          photoTransform: normalizePhotoTransform(jobBeforeRender.photoTransform),
           suggestedText: jobBeforeRender.suggestedText,
         });
         previewUrlsRef.current.add(result.previewUrl);
@@ -394,6 +406,45 @@ function App() {
     scheduleAutoGenerate(jobId);
   }
 
+  function updateSelectedPhotoTransform(nextTransform: Partial<PhotoTransform>) {
+    if (!selectedJob) {
+      return;
+    }
+
+    const jobId = selectedJob.id;
+    const photoTransform = normalizePhotoTransform({
+      ...selectedPhotoTransform,
+      ...nextTransform,
+    });
+    revokePreviewUrl(selectedJob.previewUrl);
+    setJobs((current) =>
+      current.map((job) =>
+        job.id === jobId
+          ? {
+              ...markJobForRegeneration(job),
+              photoTransform,
+            }
+          : job,
+      ),
+    );
+    scheduleAutoGenerate(jobId);
+  }
+
+  function resetSelectedPhotoTransform() {
+    updateSelectedPhotoTransform(createDefaultPhotoTransform());
+  }
+
+  function handlePreviewDrag(deltaX: number, deltaY: number) {
+    if (!selectedJob) {
+      return;
+    }
+
+    updateSelectedPhotoTransform({
+      offsetX: selectedPhotoTransform.offsetX + deltaX * PREVIEW_DRAG_OFFSET_PER_PX,
+      offsetY: selectedPhotoTransform.offsetY + deltaY * PREVIEW_DRAG_OFFSET_PER_PX,
+    });
+  }
+
   function applyCurrentFrameSettingsToAll() {
     if (!selectedJob) {
       return;
@@ -482,6 +533,7 @@ function App() {
         theme,
         mode: 'export',
         photoText: jobBeforeRender.customText,
+        photoTransform: normalizePhotoTransform(jobBeforeRender.photoTransform),
         suggestedText: jobBeforeRender.suggestedText,
       });
       previewUrlsRef.current.add(result.previewUrl);
@@ -629,7 +681,7 @@ function App() {
               </div>
             </div>
 
-            <div className="preview-canvas">
+            <PreviewCanvas onDrag={handlePreviewDrag}>
               {previewUrl ? (
                 <img src={previewUrl} alt={selectedJob?.originalName ?? '照片预览'} />
               ) : (
@@ -638,7 +690,7 @@ function App() {
                   <p>选择照片后，这里会显示原图或处理结果。</p>
                 </div>
               )}
-            </div>
+            </PreviewCanvas>
 
             {isMobile ? (
               <div className="mobile-action-bar">
@@ -670,7 +722,10 @@ function App() {
               onApplyFrameSettingsToAll={applyCurrentFrameSettingsToAll}
               onFrameColorChange={updateSelectedFrameColor}
               onFrameSettingsChange={updateSelectedFrameSettings}
+              onPhotoTransformChange={updateSelectedPhotoTransform}
+              onPhotoTransformReset={resetSelectedPhotoTransform}
               onPhotoTextChange={updateSelectedPhotoText}
+              photoTransform={selectedPhotoTransform}
             />
 
             <section className="export-card">
@@ -807,23 +862,75 @@ function JobList({
   );
 }
 
+function PreviewCanvas({
+  children,
+  onDrag,
+}: {
+  children: React.ReactNode;
+  onDrag: (deltaX: number, deltaY: number) => void;
+}) {
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  return (
+    <div
+      className="preview-canvas"
+      data-testid="preview-canvas"
+      onPointerDown={(event) => {
+        if (event.button !== 0) {
+          return;
+        }
+
+        dragStartRef.current = { x: event.clientX, y: event.clientY };
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      }}
+      onPointerUp={(event) => {
+        const start = dragStartRef.current;
+        dragStartRef.current = null;
+        if (!start) {
+          return;
+        }
+
+        const deltaX = event.clientX - start.x;
+        const deltaY = event.clientY - start.y;
+        if (Math.hypot(deltaX, deltaY) < PREVIEW_DRAG_MIN_PX) {
+          return;
+        }
+
+        onDrag(deltaX, deltaY);
+      }}
+      onPointerCancel={() => {
+        dragStartRef.current = null;
+      }}
+      role="presentation"
+    >
+      {children}
+    </div>
+  );
+}
+
 function TemplateControls({
   frameTemplate,
+  photoTransform,
   selectedJob,
   template,
   onChange,
   onApplyFrameSettingsToAll,
   onFrameColorChange,
   onFrameSettingsChange,
+  onPhotoTransformChange,
+  onPhotoTransformReset,
   onPhotoTextChange,
 }: {
   frameTemplate: FrameTemplate;
+  photoTransform: PhotoTransform;
   selectedJob?: BatchJob;
   template: FrameTemplate;
   onChange: (template: FrameTemplate) => void;
   onApplyFrameSettingsToAll: () => void;
   onFrameColorChange: (color: string) => void;
   onFrameSettingsChange: (settings: Partial<PhotoFrameSettings>) => void;
+  onPhotoTransformChange: (transform: Partial<PhotoTransform>) => void;
+  onPhotoTransformReset: () => void;
   onPhotoTextChange: (customText: string) => void;
 }) {
   const palette = withFixedFrameColors(selectedJob?.palette?.length ? selectedJob.palette : DEFAULT_PALETTE);
@@ -884,6 +991,57 @@ function TemplateControls({
       <button className="apply-current-button" disabled={!selectedJob} onClick={onApplyFrameSettingsToAll} type="button">
         应用当前
       </button>
+
+      <div className="composition-card">
+        <div className="composition-title">
+          <span>图片构图</span>
+          <button data-testid="photo-transform-reset" disabled={!selectedJob} onClick={onPhotoTransformReset} type="button">
+            重置
+          </button>
+        </div>
+
+        <label className="field">
+          <span>缩放 {Math.round(photoTransform.scale * 100)}%</span>
+          <input
+            data-testid="photo-scale-input"
+            disabled={!selectedJob}
+            max={PHOTO_SCALE_MAX}
+            min={PHOTO_SCALE_MIN}
+            step="0.01"
+            type="range"
+            value={photoTransform.scale}
+            onChange={(event) => onPhotoTransformChange({ scale: Number(event.target.value) })}
+          />
+        </label>
+
+        <label className="field">
+          <span>水平位置 {Math.round(photoTransform.offsetX)}</span>
+          <input
+            data-testid="photo-offset-x-input"
+            disabled={!selectedJob}
+            max={PHOTO_OFFSET_MAX}
+            min={PHOTO_OFFSET_MIN}
+            step="1"
+            type="range"
+            value={photoTransform.offsetX}
+            onChange={(event) => onPhotoTransformChange({ offsetX: Number(event.target.value) })}
+          />
+        </label>
+
+        <label className="field">
+          <span>垂直位置 {Math.round(photoTransform.offsetY)}</span>
+          <input
+            data-testid="photo-offset-y-input"
+            disabled={!selectedJob}
+            max={PHOTO_OFFSET_MAX}
+            min={PHOTO_OFFSET_MIN}
+            step="1"
+            type="range"
+            value={photoTransform.offsetY}
+            onChange={(event) => onPhotoTransformChange({ offsetY: Number(event.target.value) })}
+          />
+        </label>
+      </div>
 
       <div className="field palette-field">
         <span>色框颜色</span>

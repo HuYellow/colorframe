@@ -1,4 +1,5 @@
 import type { BatchJob, BatchJobStatus, BatchSummary } from '../types';
+import { createDefaultPhotoTransform } from './photoTransform';
 
 const imageMimePattern = /^image\/(png|jpe?g|webp|gif|bmp|avif|heic|heif)$/i;
 
@@ -16,6 +17,7 @@ export function createBatchJobs(files: File[]): BatchJob[] {
       originalName: file.name,
       status: valid ? 'pending' : 'failed',
       progress: 0,
+      photoTransform: createDefaultPhotoTransform(),
       errorMessage: valid ? undefined : '不支持的文件类型',
     };
   });

@@ -108,6 +108,35 @@ test('auto regenerates the selected image after editing text', async ({ page }) 
   await expect(page.getByTestId('download-current')).toBeEnabled({ timeout: 10000 });
 });
 
+test('adjusts the selected image composition with sliders', async ({ page }) => {
+  await page.goto('/');
+
+  await uploadImages(page, [{ name: 'compose.png', mimeType: 'image/png', buffer: await createTestPng(page) }]);
+  await page.getByTestId('photo-scale-input').evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = '1.5';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    slider.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.getByTestId('photo-offset-x-input').evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = '30';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    slider.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.getByTestId('photo-offset-y-input').evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = '-20';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    slider.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  await expect(page.getByTestId('photo-scale-input')).toHaveValue('1.5');
+  await expect(page.getByTestId('photo-offset-x-input')).toHaveValue('30');
+  await expect(page.getByTestId('photo-offset-y-input')).toHaveValue('-20');
+  await expect(page.getByTestId('download-current')).toBeEnabled({ timeout: 10000 });
+});
+
 test('downloads the currently selected image', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'canShare', {

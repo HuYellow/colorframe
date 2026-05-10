@@ -21,6 +21,12 @@ export type FrameTemplate = {
 
 export type PhotoFrameSettings = Pick<FrameTemplate, 'frameRatio' | 'cornerRadiusRatio' | 'frameStyle'>;
 
+export type PhotoTransform = {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+};
+
 export type ColorTheme = {
   dominantColor: string;
   frameColor: string;
@@ -50,6 +56,7 @@ export type BatchJob = {
   captionStatus?: SmartCaptionStatus;
   metadataSummary?: PhotoMetadataSummary;
   frameSettings?: PhotoFrameSettings;
+  photoTransform?: PhotoTransform;
   selectedFrameColor?: string;
   themeColor?: string;
   palette?: string[];

@@ -1,4 +1,5 @@
-import type { ColorTheme, FrameTemplate, RenderResult } from '../types';
+import type { ColorTheme, FrameTemplate, PhotoTransform, RenderResult } from '../types';
+import { normalizePhotoTransform } from './photoTransform';
 import { getMimeType, getTemplateText } from './template';
 
 const PREVIEW_MAX_SIDE = 1600;
@@ -10,6 +11,7 @@ export async function renderFramedImage({
   theme,
   mode,
   photoText,
+  photoTransform,
   suggestedText,
 }: {
   file: File;
@@ -17,6 +19,7 @@ export async function renderFramedImage({
   theme: ColorTheme;
   mode: 'preview' | 'export';
   photoText?: string;
+  photoTransform?: PhotoTransform;
   suggestedText?: string;
 }): Promise<RenderResult> {
   const imageUrl = URL.createObjectURL(file);
@@ -40,7 +43,16 @@ export async function renderFramedImage({
     canvas.height = imageHeight + frame * 2;
 
     drawFrameBackground(context, image, canvas, theme, template.frameStyle);
-    drawRoundedImage(context, image, frame, frame, imageWidth, imageHeight, Math.round(shortSide * template.cornerRadiusRatio));
+    drawRoundedImage(
+      context,
+      image,
+      frame,
+      frame,
+      imageWidth,
+      imageHeight,
+      Math.round(shortSide * template.cornerRadiusRatio),
+      photoTransform,
+    );
     drawText(context, canvas, template, theme, file.name, frame, photoText, suggestedText);
 
     const blob = await canvasToBlob(canvas, getMimeType(template.exportFormat), template.exportQuality);
@@ -81,17 +93,60 @@ function drawRoundedImage(
   width: number,
   height: number,
   radius: number,
+  transform?: PhotoTransform,
 ) {
+  const drawRect = computePhotoDrawRect({
+    sourceWidth: image.naturalWidth,
+    sourceHeight: image.naturalHeight,
+    targetWidth: width,
+    targetHeight: height,
+    transform,
+  });
+
   if (radius <= 0) {
-    context.drawImage(image, x, y, width, height);
+    context.drawImage(image, x + drawRect.x, y + drawRect.y, drawRect.width, drawRect.height);
     return;
   }
 
   context.save();
   roundedRectPath(context, x, y, width, height, radius);
   context.clip();
-  context.drawImage(image, x, y, width, height);
+  context.drawImage(image, x + drawRect.x, y + drawRect.y, drawRect.width, drawRect.height);
   context.restore();
+}
+
+export function computePhotoDrawRect({
+  sourceWidth,
+  sourceHeight,
+  targetWidth,
+  targetHeight,
+  transform,
+}: {
+  sourceWidth: number;
+  sourceHeight: number;
+  targetWidth: number;
+  targetHeight: number;
+  transform?: Partial<PhotoTransform>;
+}) {
+  const normalizedTransform = normalizePhotoTransform(transform);
+  const coverScale = Math.max(targetWidth / sourceWidth, targetHeight / sourceHeight);
+  const width = Math.round(sourceWidth * coverScale * normalizedTransform.scale);
+  const height = Math.round(sourceHeight * coverScale * normalizedTransform.scale);
+  const centerX = (targetWidth - width) / 2;
+  const centerY = (targetHeight - height) / 2;
+
+  return {
+    x: Math.round(centerX + getOffsetPixels(normalizedTransform.offsetX, width, targetWidth)),
+    y: Math.round(centerY + getOffsetPixels(normalizedTransform.offsetY, height, targetHeight)),
+    width,
+    height,
+  };
+}
+
+function getOffsetPixels(offset: number, drawSize: number, targetSize: number): number {
+  const maxOffset = drawSize > targetSize ? (drawSize - targetSize) / 2 : drawSize < targetSize ? drawSize : 0;
+
+  return (offset / 100) * maxOffset;
 }
 
 function drawText(
