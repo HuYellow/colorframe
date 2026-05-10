@@ -1,7 +1,171 @@
 import { describe, expect, it } from 'vitest';
-import { computePhotoDrawRect } from '../utils/renderer';
+import {
+  computeCanvasLayout,
+  computeTextRenderMode,
+  computePhotoDrawRect,
+  computeSmartAnalysisLayout,
+  layoutTextLines,
+  normalizeManualTextLines,
+} from '../utils/renderer';
 
 describe('renderer photo composition', () => {
+  it('uses a top color block above the photo for stacked layouts', () => {
+    expect(
+      computeCanvasLayout({
+        imageWidth: 400,
+        imageHeight: 300,
+        frame: 40,
+        template: {
+          frameLayout: 'stacked',
+          frameRatio: 0.07,
+          cornerRadiusRatio: 0.025,
+          frameStyle: 'solid',
+          textMode: 'filename',
+          customText: '',
+          textPosition: 'bottom',
+          topBlockRatio: 1,
+          exportFormat: 'png',
+          exportQuality: 0.92,
+        },
+      }),
+    ).toEqual({
+      canvasWidth: 400,
+      canvasHeight: 600,
+      photoX: 0,
+      photoY: 300,
+      photoWidth: 400,
+      photoHeight: 300,
+      textAreaX: 0,
+      textAreaY: 0,
+      textAreaWidth: 400,
+      textAreaHeight: 300,
+    });
+  });
+
+  it('keeps the existing framed geometry for surround layouts', () => {
+    expect(
+      computeCanvasLayout({
+        imageWidth: 400,
+        imageHeight: 300,
+        frame: 40,
+        template: {
+          frameLayout: 'surround',
+          frameRatio: 0.07,
+          cornerRadiusRatio: 0.025,
+          frameStyle: 'blur',
+          textMode: 'filename',
+          customText: '',
+          textPosition: 'bottom',
+          topBlockRatio: 1,
+          exportFormat: 'png',
+          exportQuality: 0.92,
+        },
+      }),
+    ).toMatchObject({
+      canvasWidth: 480,
+      canvasHeight: 380,
+      photoX: 40,
+      photoY: 40,
+      photoWidth: 400,
+      photoHeight: 300,
+    });
+  });
+
+  it('normalizes manual multiline text by trimming blank edge lines', () => {
+    expect(normalizeManualTextLines('\n  Stanley, Hong Kong  \n17:49 SEPTEMBER\n\n#628ca0\n')).toEqual([
+      'Stanley, Hong Kong',
+      '17:49 SEPTEMBER',
+      '',
+      '#628ca0',
+    ]);
+  });
+
+  it('lays out multiline text inside the available block', () => {
+    const context = {
+      font: '',
+      measureText: (text: string) => ({ width: text.length * 10 }),
+    } as CanvasRenderingContext2D;
+
+    const layout = layoutTextLines(context, ['Stanley, Hong Kong', '17:49 SEPTEMBER', '#628ca0'], {
+      centerX: 200,
+      centerY: 150,
+      maxWidth: 260,
+      maxHeight: 120,
+      initialFontSize: 36,
+    });
+
+    expect(layout.fontSize).toBeLessThan(36);
+    expect(layout.lines).toHaveLength(3);
+    expect(layout.lines[0]).toMatchObject({ text: 'Stanley, Hong Kong', x: 200 });
+    expect(layout.lines[2].y).toBeGreaterThan(layout.lines[0].y);
+  });
+
+  it('lays out smart analysis as centered metadata copy without a leading color chip', () => {
+    expect(
+      computeSmartAnalysisLayout({
+        areaX: 0,
+        areaY: 0,
+        areaWidth: 600,
+        areaHeight: 240,
+      }),
+    ).toEqual({
+      textX: 174,
+      titleY: 90,
+      subtitleY: 122,
+      detailsY: 154,
+      maxTextWidth: 252,
+    });
+  });
+
+  it('uses the smart analysis block even when the legacy smart caption text is empty', () => {
+    expect(
+      computeTextRenderMode({
+        template: {
+          frameLayout: 'stacked',
+          frameRatio: 0.07,
+          cornerRadiusRatio: 0.025,
+          frameStyle: 'solid',
+          textMode: 'smart',
+          customText: '',
+          textPosition: 'bottom',
+          topBlockRatio: 1,
+          exportFormat: 'png',
+          exportQuality: 0.92,
+        },
+        fileName: 'harbour.jpg',
+        smartAnalysis: {
+          title: 'HARBOUR',
+          subtitle: '2:54 PM',
+          detailLines: ['摄于 iPhone XS 记录这一瞬'],
+        },
+        suggestedText: '',
+      }),
+    ).toEqual({
+      kind: 'smartAnalysis',
+      analysis: {
+        title: 'HARBOUR',
+        subtitle: '2:54 PM',
+        detailLines: ['摄于 iPhone XS 记录这一瞬'],
+      },
+    });
+  });
+
+  it('moves smart analysis details up when there is no subtitle', () => {
+    expect(
+      computeSmartAnalysisLayout({
+        areaX: 0,
+        areaY: 0,
+        areaWidth: 600,
+        areaHeight: 240,
+        hasSubtitle: false,
+      }),
+    ).toMatchObject({
+      titleY: 90,
+      subtitleY: undefined,
+      detailsY: 126,
+    });
+  });
+
   it('keeps the default scale as the current cover fit', () => {
     expect(
       computePhotoDrawRect({

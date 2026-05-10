@@ -26,7 +26,7 @@ export function getMobileExportMode({
   canShareFiles: boolean;
 }): MobileExportMode {
   if (count >= 10) {
-    return 'zip';
+    return 'download';
   }
 
   return canShareFiles ? 'share' : 'download';

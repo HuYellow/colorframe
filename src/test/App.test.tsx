@@ -54,6 +54,11 @@ describe('ColorFrame app', () => {
       suggestedText: '把 a 的颜色留在这一刻',
       captionStatus: 'ready',
       metadataSummary: { hasGps: false },
+      smartAnalysis: {
+        title: 'A',
+        subtitle: '此刻',
+        detailLines: ['摄于未知设备'],
+      },
     });
   });
 
@@ -105,14 +110,24 @@ describe('ColorFrame app', () => {
       1,
       expect.objectContaining({
         file: expect.objectContaining({ name: 'a.png' }),
-        template: expect.objectContaining({ frameStyle: 'blur', textMode: 'filename' }),
+        template: expect.objectContaining({
+          frameLayout: 'stacked',
+          frameStyle: 'solid',
+          topBlockRatio: 1,
+          textMode: 'filename',
+        }),
       }),
     );
     expect(mocks.renderFramedImage).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         file: expect.objectContaining({ name: 'b.jpg' }),
-        template: expect.objectContaining({ frameStyle: 'blur', textMode: 'filename' }),
+        template: expect.objectContaining({
+          frameLayout: 'stacked',
+          frameStyle: 'solid',
+          topBlockRatio: 1,
+          textMode: 'filename',
+        }),
       }),
     );
     expect(screen.getByText(/2 张完成/i)).toBeInTheDocument();
@@ -161,12 +176,36 @@ describe('ColorFrame app', () => {
     expect(screen.getByText(/专属文字：First caption/i)).toBeInTheDocument();
   });
 
-  it('offers smart text mode and renders with the generated suggestion', async () => {
+  it('lets template and selected-photo text keep manual line breaks', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: /统一文字/i }));
+    fireEvent.change(screen.getByLabelText(/统一文字/i), {
+      target: { value: 'Stanley, Hong Kong\n17:49 SEPTEMBER' },
+    });
+
+    expect(screen.getByLabelText(/统一文字/i)).toHaveValue('Stanley, Hong Kong\n17:49 SEPTEMBER');
+
+    await user.upload(screen.getByLabelText(/选择照片/i), [new File(['image-a'], 'a.png', { type: 'image/png' })]);
+    fireEvent.change(screen.getByLabelText(/当前照片文字/i), {
+      target: { value: 'Line one\nLine two' },
+    });
+
+    expect(screen.getByLabelText(/当前照片文字/i)).toHaveValue('Line one\nLine two');
+  });
+
+  it('offers smart analysis mode and renders with parsed image information', async () => {
     vi.useFakeTimers();
     mocks.createSmartCaption.mockResolvedValueOnce({
       suggestedText: '把 garden walk 的颜色留在这一刻',
       captionStatus: 'ready',
       metadataSummary: { hasGps: false },
+      smartAnalysis: {
+        title: 'GARDEN WALK',
+        subtitle: '2:54 PM',
+        detailLines: ['摄于 iPhone XS 记录这一瞬'],
+      },
     });
     render(<App />);
 
@@ -174,12 +213,12 @@ describe('ColorFrame app', () => {
       target: { files: [new File(['image-a'], 'garden_walk.png', { type: 'image/png' })] },
     });
 
-    expect(screen.getByRole('button', { name: /智能建议/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /智能解析/i })).toBeInTheDocument();
     await act(async () => {
       await Promise.resolve();
     });
     expect(mocks.createSmartCaption).toHaveBeenCalledWith(expect.objectContaining({ name: 'garden_walk.png' }));
-    fireEvent.click(screen.getByRole('button', { name: /智能建议/i }));
+    fireEvent.click(screen.getByRole('button', { name: /智能解析/i }));
 
     await act(async () => {
       vi.advanceTimersByTime(500);
@@ -191,9 +230,14 @@ describe('ColorFrame app', () => {
         file: expect.objectContaining({ name: 'garden_walk.png' }),
         template: expect.objectContaining({ textMode: 'smart' }),
         suggestedText: '把 garden walk 的颜色留在这一刻',
+        smartAnalysis: {
+          title: 'GARDEN WALK',
+          subtitle: '2:54 PM',
+          detailLines: ['摄于 iPhone XS 记录这一瞬'],
+        },
       }),
     );
-    expect(screen.getByText(/智能建议：把 garden walk 的颜色留在这一刻/i)).toBeInTheDocument();
+    expect(screen.getByText(/智能解析：GARDEN WALK · 2:54 PM/i)).toBeInTheDocument();
   });
 
   it('lets the selected photo store a chosen palette color and fixed black or white colors', async () => {
@@ -207,17 +251,25 @@ describe('ColorFrame app', () => {
     await user.click(screen.getByRole('button', { name: /选择色框颜色 #335577/i }));
 
     expect(screen.getByRole('button', { name: /选择色框颜色 #335577/i })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText(/色框颜色：#335577/i)).toBeInTheDocument();
+    expect(screen.getByText(/颜色：#335577/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /选择色框颜色 #ffffff/i }));
 
     expect(screen.getByRole('button', { name: /选择色框颜色 #ffffff/i })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText(/色框颜色：#ffffff/i)).toBeInTheDocument();
+    expect(screen.getByText(/颜色：#ffffff/i)).toBeInTheDocument();
   });
 
-  it('lets users switch between solid and blur frame modes', async () => {
+  it('lets users switch between layouts and solid or blur frame modes', async () => {
     const user = userEvent.setup();
     render(<App />);
+
+    expect(screen.getByRole('button', { name: /上色块下图/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText(/色块高度/i)).toHaveValue('1');
+    expect(screen.queryByRole('button', { name: /高斯模糊/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /色框包围/i }));
+    expect(screen.getByRole('button', { name: /纯色/i })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: /高斯模糊/i }));
 
     expect(screen.getByRole('button', { name: /高斯模糊/i })).toHaveAttribute('aria-pressed', 'true');
     await user.click(screen.getByRole('button', { name: /纯色/i }));
@@ -225,7 +277,7 @@ describe('ColorFrame app', () => {
     expect(screen.getByRole('button', { name: /纯色/i })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('keeps frame ratio, corner radius, and frame mode local to the selected photo', async () => {
+  it('keeps layout, top block height, frame ratio, corner radius, and frame mode local to the selected photo', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -236,19 +288,21 @@ describe('ColorFrame app', () => {
     await waitFor(() => expect(mocks.renderFramedImage).toHaveBeenCalledTimes(2));
 
     await user.click(screen.getByRole('button', { name: /^a\.png/i }));
+    fireEvent.change(screen.getByLabelText(/色块高度/i), { target: { value: '0.6' } });
+    await user.click(screen.getByRole('button', { name: /色框包围/i }));
     fireEvent.change(screen.getByLabelText(/边框比例/i), { target: { value: '0.1' } });
     fireEvent.change(screen.getByLabelText(/圆角比例/i), { target: { value: '0.04' } });
-    await user.click(screen.getByRole('button', { name: /纯色/i }));
+    await user.click(screen.getByRole('button', { name: /高斯模糊/i }));
 
+    expect(screen.getByRole('button', { name: /色框包围/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText(/边框比例/i)).toHaveValue('0.1');
     expect(screen.getByLabelText(/圆角比例/i)).toHaveValue('0.04');
-    expect(screen.getByRole('button', { name: /纯色/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /高斯模糊/i })).toHaveAttribute('aria-pressed', 'true');
 
     await user.click(screen.getByRole('button', { name: /^b\.jpg/i }));
 
-    expect(screen.getByLabelText(/边框比例/i)).toHaveValue('0.07');
-    expect(screen.getByLabelText(/圆角比例/i)).toHaveValue('0.025');
-    expect(screen.getByRole('button', { name: /高斯模糊/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /上色块下图/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText(/色块高度/i)).toHaveValue('1');
   });
 
   it('applies the current frame settings to other photos without changing their frame colors', async () => {
@@ -264,15 +318,18 @@ describe('ColorFrame app', () => {
     await user.click(screen.getByRole('button', { name: /^b\.jpg/i }));
     await user.click(screen.getByRole('button', { name: /选择色框颜色 #000000/i }));
     await user.click(screen.getByRole('button', { name: /^a\.png/i }));
+    fireEvent.change(screen.getByLabelText(/色块高度/i), { target: { value: '0.6' } });
+    await user.click(screen.getByRole('button', { name: /色框包围/i }));
     fireEvent.change(screen.getByLabelText(/边框比例/i), { target: { value: '0.1' } });
     fireEvent.change(screen.getByLabelText(/圆角比例/i), { target: { value: '0.04' } });
-    await user.click(screen.getByRole('button', { name: /纯色/i }));
+    await user.click(screen.getByRole('button', { name: /高斯模糊/i }));
     await user.click(screen.getByRole('button', { name: /应用当前/i }));
     await user.click(screen.getByRole('button', { name: /^b\.jpg/i }));
 
+    expect(screen.getByRole('button', { name: /色框包围/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText(/边框比例/i)).toHaveValue('0.1');
     expect(screen.getByLabelText(/圆角比例/i)).toHaveValue('0.04');
-    expect(screen.getByRole('button', { name: /纯色/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /高斯模糊/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /选择色框颜色 #000000/i })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -317,11 +374,37 @@ describe('ColorFrame app', () => {
     ]);
     await waitFor(() => expect(mocks.renderFramedImage).toHaveBeenCalledTimes(2));
     await user.click(screen.getByRole('button', { name: /^b\.jpg/i }));
-    await user.click(screen.getByRole('button', { name: /逐张下载/i }));
+    await user.click(screen.getByRole('button', { name: /下载当前图片/i }));
 
     expect(shareSpy).not.toHaveBeenCalled();
     expect(downloadClick).toHaveBeenCalledTimes(1);
     expect(lastCreatedAnchor).toHaveAttribute('download', 'b_colorframe.png');
+  });
+
+  it('replaces the mobile ZIP choice with batch downloads to the album', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+    });
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: vi.fn().mockReturnValue(true),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.upload(
+      screen.getByLabelText(/选择照片/i),
+      Array.from({ length: 10 }, (_, index) => new File([`image-${index}`], `photo-${index + 1}.png`, { type: 'image/png' })),
+    );
+    await waitFor(() => expect(mocks.renderFramedImage).toHaveBeenCalledTimes(10));
+
+    expect(screen.queryByRole('button', { name: /下载 ZIP/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /批量下载到相册/i }));
+
+    expect(downloadClick).toHaveBeenCalledTimes(10);
+    expect(lastCreatedAnchor).toHaveAttribute('download', 'photo-10_colorframe.png');
   });
 
   it('auto generates the first uploaded photo with the default template after half a second', async () => {
@@ -350,7 +433,12 @@ describe('ColorFrame app', () => {
     expect(mocks.renderFramedImage).toHaveBeenCalledWith(
       expect.objectContaining({
         file: expect.objectContaining({ name: 'a.png' }),
-        template: expect.objectContaining({ frameStyle: 'blur', textMode: 'filename' }),
+        template: expect.objectContaining({
+          frameLayout: 'stacked',
+          frameStyle: 'solid',
+          topBlockRatio: 1,
+          textMode: 'filename',
+        }),
       }),
     );
     expect(screen.getByText(/1 张完成/i)).toBeInTheDocument();
@@ -408,6 +496,7 @@ describe('ColorFrame app', () => {
       target: { files: [new File(['image-a'], 'a.png', { type: 'image/png' })] },
     });
     fireEvent.click(screen.getByRole('button', { name: /选择色框颜色 #335577/i }));
+    fireEvent.click(screen.getByRole('button', { name: /色框包围/i }));
     fireEvent.click(screen.getByRole('button', { name: /高斯模糊/i }));
 
     expect(screen.getByText(/稍后自动生成当前照片/i)).toBeInTheDocument();

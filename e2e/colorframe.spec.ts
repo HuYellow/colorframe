@@ -82,20 +82,23 @@ test('stores custom text per selected photo', async ({ page }) => {
   await expect(page.getByTestId('photo-text-input')).toHaveValue('First caption');
 });
 
-test('switches palette color and frame style', async ({ page }) => {
+test('switches layout, palette color, and frame style', async ({ page }) => {
   await page.goto('/');
 
   await uploadImages(page, [{ name: 'first.png', mimeType: 'image/png', buffer: Buffer.from('not-a-real-image') }]);
 
-  await expect(page.getByTestId('frame-style-blur')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('frame-layout-stacked')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('top-block-ratio-input')).toHaveValue('1');
   await expect(page.getByTestId('frame-color-ffffff')).toBeVisible();
   await expect(page.getByTestId('frame-color-000000')).toBeVisible();
 
   await page.getByTestId('frame-color-335577').click();
-  await page.getByTestId('frame-style-solid').click();
+  await page.getByTestId('frame-layout-surround').click();
+  await page.getByTestId('frame-style-blur').click();
   await page.getByTestId('frame-color-000000').click();
 
-  await expect(page.getByTestId('frame-style-solid')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('frame-layout-surround')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('frame-style-blur')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('frame-color-000000')).toHaveAttribute('aria-pressed', 'true');
 });
 

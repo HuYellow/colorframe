@@ -245,6 +245,7 @@ function App() {
           mode: 'export',
           photoText: jobBeforeRender.customText,
           photoTransform: normalizePhotoTransform(jobBeforeRender.photoTransform),
+          smartAnalysis: jobBeforeRender.smartAnalysis,
           suggestedText: jobBeforeRender.suggestedText,
         });
         previewUrlsRef.current.add(result.previewUrl);
@@ -312,7 +313,7 @@ function App() {
     }
 
     if (!canShareFiles(shareFiles)) {
-      setMessage('当前浏览器不支持批量分享图片，请使用 ZIP 下载。');
+      setMessage('当前浏览器不支持批量分享图片，可批量下载到相册。');
       return;
     }
 
@@ -324,8 +325,24 @@ function App() {
       });
       setMessage('已打开系统分享面板。');
     } catch {
-      setMessage('分享已取消或失败，可以改用 ZIP 下载。');
+      setMessage('分享已取消或失败，可以批量下载到相册。');
     }
+  }
+
+  function downloadBatchToAlbum() {
+    if (!doneJobs.length) {
+      return;
+    }
+
+    const usedNames = new Set<string>();
+    doneJobs.forEach((job) => {
+      if (!job.outputBlob) {
+        return;
+      }
+
+      downloadBlob(job.outputBlob, buildOutputFileName(job.originalName, template.exportFormat, usedNames));
+    });
+    setMessage(`已开始保存 ${doneJobs.length} 张图片，请在相册或下载记录中查看。`);
   }
 
   function downloadOne(job: BatchJob) {
@@ -534,6 +551,7 @@ function App() {
         mode: 'export',
         photoText: jobBeforeRender.customText,
         photoTransform: normalizePhotoTransform(jobBeforeRender.photoTransform),
+        smartAnalysis: jobBeforeRender.smartAnalysis,
         suggestedText: jobBeforeRender.suggestedText,
       });
       previewUrlsRef.current.add(result.previewUrl);
@@ -612,6 +630,7 @@ function App() {
                 ? {
                     ...item,
                     suggestedText: caption.suggestedText,
+                    smartAnalysis: caption.smartAnalysis,
                     captionStatus: caption.captionStatus,
                     metadataSummary: caption.metadataSummary,
                   }
@@ -703,6 +722,7 @@ function App() {
                   isProcessing={isProcessing}
                   mobileExportMode={mobileExportMode}
                   onCancel={cancelBatch}
+                  onDownloadBatch={downloadBatchToAlbum}
                   onDownloadCurrent={() => downloadableSelectedJob && downloadOne(downloadableSelectedJob)}
                   onProcess={processBatch}
                   onShare={shareResults}
@@ -744,6 +764,7 @@ function App() {
                   isProcessing={isProcessing}
                   mobileExportMode={mobileExportMode}
                   onCancel={cancelBatch}
+                  onDownloadBatch={downloadBatchToAlbum}
                   onDownloadCurrent={() => downloadableSelectedJob && downloadOne(downloadableSelectedJob)}
                   onProcess={processBatch}
                   onShare={shareResults}
@@ -935,6 +956,7 @@ function TemplateControls({
 }) {
   const palette = withFixedFrameColors(selectedJob?.palette?.length ? selectedJob.palette : DEFAULT_PALETTE);
   const selectedColor = selectedJob?.selectedFrameColor ?? selectedJob?.themeColor ?? palette[0];
+  const isStackedLayout = frameTemplate.frameLayout === 'stacked';
 
   return (
     <section className="controls-card">
@@ -943,43 +965,19 @@ function TemplateControls({
         <h2>默认流程</h2>
       </div>
 
-      <label className="field">
-        <span>边框比例</span>
-        <input
-          max="0.12"
-          min="0.04"
-          step="0.005"
-          type="range"
-          value={frameTemplate.frameRatio}
-          onChange={(event) => onFrameSettingsChange({ frameRatio: Number(event.target.value) })}
-        />
-      </label>
-
-      <label className="field">
-        <span>圆角比例</span>
-        <input
-          max="0.08"
-          min="0"
-          step="0.005"
-          type="range"
-          value={frameTemplate.cornerRadiusRatio}
-          onChange={(event) => onFrameSettingsChange({ cornerRadiusRatio: Number(event.target.value) })}
-        />
-      </label>
-
       <div className="field">
-        <span>色框模式</span>
-        <div className="segmented" aria-label="色框模式">
+        <span>版式</span>
+        <div className="segmented" aria-label="版式">
           {[
-            ['solid', '纯色'],
-            ['blur', '高斯模糊'],
-          ].map(([style, label]) => (
+            ['stacked', '上色块下图'],
+            ['surround', '色框包围'],
+          ].map(([layout, label]) => (
             <button
-              aria-pressed={frameTemplate.frameStyle === style}
-              className={frameTemplate.frameStyle === style ? 'selected' : ''}
-              data-testid={`frame-style-${style}`}
-              key={style}
-              onClick={() => onFrameSettingsChange({ frameStyle: style as FrameTemplate['frameStyle'] })}
+              aria-pressed={frameTemplate.frameLayout === layout}
+              className={frameTemplate.frameLayout === layout ? 'selected' : ''}
+              data-testid={`frame-layout-${layout}`}
+              key={layout}
+              onClick={() => onFrameSettingsChange({ frameLayout: layout as FrameTemplate['frameLayout'] })}
               type="button"
             >
               {label}
@@ -987,6 +985,69 @@ function TemplateControls({
           ))}
         </div>
       </div>
+
+      {isStackedLayout ? (
+        <label className="field">
+          <span>色块高度 {Math.round(frameTemplate.topBlockRatio * 100)}%</span>
+          <input
+            aria-label="色块高度"
+            data-testid="top-block-ratio-input"
+            max="1.2"
+            min="0.35"
+            step="0.05"
+            type="range"
+            value={frameTemplate.topBlockRatio}
+            onChange={(event) => onFrameSettingsChange({ topBlockRatio: Number(event.target.value) })}
+          />
+        </label>
+      ) : (
+        <>
+          <label className="field">
+            <span>边框比例</span>
+            <input
+              max="0.12"
+              min="0.04"
+              step="0.005"
+              type="range"
+              value={frameTemplate.frameRatio}
+              onChange={(event) => onFrameSettingsChange({ frameRatio: Number(event.target.value) })}
+            />
+          </label>
+
+          <label className="field">
+            <span>圆角比例</span>
+            <input
+              max="0.08"
+              min="0"
+              step="0.005"
+              type="range"
+              value={frameTemplate.cornerRadiusRatio}
+              onChange={(event) => onFrameSettingsChange({ cornerRadiusRatio: Number(event.target.value) })}
+            />
+          </label>
+
+          <div className="field">
+            <span>色框模式</span>
+            <div className="segmented" aria-label="色框模式">
+              {[
+                ['solid', '纯色'],
+                ['blur', '高斯模糊'],
+              ].map(([style, label]) => (
+                <button
+                  aria-pressed={frameTemplate.frameStyle === style}
+                  className={frameTemplate.frameStyle === style ? 'selected' : ''}
+                  data-testid={`frame-style-${style}`}
+                  key={style}
+                  onClick={() => onFrameSettingsChange({ frameStyle: style as FrameTemplate['frameStyle'] })}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       <button className="apply-current-button" disabled={!selectedJob} onClick={onApplyFrameSettingsToAll} type="button">
         应用当前
@@ -1044,8 +1105,8 @@ function TemplateControls({
       </div>
 
       <div className="field palette-field">
-        <span>色框颜色</span>
-        <div className="palette-picker" aria-label="色框颜色">
+        <span>颜色</span>
+        <div className="palette-picker" aria-label="颜色">
           {palette.map((color) => (
             <button
               aria-label={`选择色框颜色 ${color}`}
@@ -1060,14 +1121,14 @@ function TemplateControls({
             />
           ))}
         </div>
-        <small>色框颜色：{selectedColor}</small>
+        <small>颜色：{selectedColor}</small>
       </div>
 
       <div className="segmented" aria-label="文字模式">
         {[
           ['filename', '文件名'],
           ['custom', '统一文字'],
-          ['smart', '智能建议'],
+          ['smart', '智能解析'],
           ['none', '无文字'],
         ].map(([mode, label]) => (
           <button
@@ -1084,8 +1145,7 @@ function TemplateControls({
       {template.textMode === 'custom' ? (
         <label className="field">
           <span>统一文字</span>
-          <input
-            type="text"
+          <textarea
             value={template.customText}
             onChange={(event) => onChange({ ...template, customText: event.target.value })}
             placeholder="例如 Shanghai / 2026"
@@ -1095,19 +1155,21 @@ function TemplateControls({
 
       <label className="field photo-text-field">
         <span>当前照片文字</span>
-        <input
+        <textarea
           aria-label="当前照片文字"
           data-testid="photo-text-input"
           disabled={!selectedJob}
-          type="text"
           value={selectedJob?.customText ?? ''}
           onChange={(event) => onPhotoTextChange(event.target.value)}
           placeholder={selectedJob ? '留空则使用上方文字规则' : '先选择一张照片'}
         />
         {selectedJob?.customText?.trim() ? (
           <small>专属文字：{selectedJob.customText.trim()}</small>
-        ) : template.textMode === 'smart' && selectedJob?.suggestedText ? (
-          <small>智能建议：{selectedJob.suggestedText}</small>
+        ) : template.textMode === 'smart' && selectedJob?.smartAnalysis ? (
+          <small>
+            智能解析：{selectedJob.smartAnalysis.title}
+            {selectedJob.smartAnalysis.subtitle ? ` · ${selectedJob.smartAnalysis.subtitle}` : ''}
+          </small>
         ) : template.textMode === 'smart' && selectedJob?.captionStatus === 'failed' ? (
           <small>未读取到拍摄信息，已使用文件名生成。</small>
         ) : (
@@ -1115,21 +1177,23 @@ function TemplateControls({
         )}
       </label>
 
-      <div className="segmented" aria-label="文字位置">
-        {[
-          ['bottom', '底部'],
-          ['top', '顶部'],
-        ].map(([position, label]) => (
-          <button
-            className={template.textPosition === position ? 'selected' : ''}
-            key={position}
-            onClick={() => onChange({ ...template, textPosition: position as FrameTemplate['textPosition'] })}
-            type="button"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {!isStackedLayout ? (
+        <div className="segmented" aria-label="文字位置">
+          {[
+            ['bottom', '底部'],
+            ['top', '顶部'],
+          ].map(([position, label]) => (
+            <button
+              className={template.textPosition === position ? 'selected' : ''}
+              key={position}
+              onClick={() => onChange({ ...template, textPosition: position as FrameTemplate['textPosition'] })}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <label className="field">
         <span>导出格式</span>
@@ -1155,9 +1219,11 @@ function withFixedFrameColors(palette: string[]) {
 
 function getJobFrameSettings(job: BatchJob, template: FrameTemplate): PhotoFrameSettings {
   return {
+    frameLayout: job.frameSettings?.frameLayout ?? template.frameLayout,
     frameRatio: job.frameSettings?.frameRatio ?? template.frameRatio,
     cornerRadiusRatio: job.frameSettings?.cornerRadiusRatio ?? template.cornerRadiusRatio,
     frameStyle: job.frameSettings?.frameStyle ?? template.frameStyle,
+    topBlockRatio: job.frameSettings?.topBlockRatio ?? template.topBlockRatio,
   };
 }
 
@@ -1177,6 +1243,7 @@ function ActionButtons({
   isProcessing,
   mobileExportMode,
   onCancel,
+  onDownloadBatch,
   onDownloadCurrent,
   onProcess,
   onShare,
@@ -1191,6 +1258,7 @@ function ActionButtons({
   isProcessing: boolean;
   mobileExportMode: 'share' | 'download' | 'zip';
   onCancel: () => void;
+  onDownloadBatch: () => void;
   onDownloadCurrent: () => void;
   onProcess: () => void;
   onShare: () => void;
@@ -1222,13 +1290,25 @@ function ActionButtons({
       {isMobile && mobileExportMode === 'download' ? (
         <button
           className="primary-action"
+          data-testid="download-batch"
+          disabled={!doneCount}
+          onClick={onDownloadBatch}
+          type="button"
+        >
+          <Images size={18} />
+          批量下载到相册
+        </button>
+      ) : null}
+      {isMobile && selectedDone ? (
+        <button
+          className="secondary-action"
           data-testid="download-current"
           disabled={!selectedDone}
           onClick={onDownloadCurrent}
           type="button"
         >
           <Download size={18} />
-          逐张下载
+          下载当前图片
         </button>
       ) : null}
       {!isMobile ? (
@@ -1243,10 +1323,12 @@ function ActionButtons({
           下载当前图片
         </button>
       ) : null}
-      <button className="secondary-action" disabled={!doneCount || isExporting} onClick={onZip} type="button">
-        {isExporting ? <Loader2 className="spin" size={18} /> : <Archive size={18} />}
-        下载 ZIP
-      </button>
+      {!isMobile ? (
+        <button className="secondary-action" disabled={!doneCount || isExporting} onClick={onZip} type="button">
+          {isExporting ? <Loader2 className="spin" size={18} /> : <Archive size={18} />}
+          下载 ZIP
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -1261,10 +1343,10 @@ function mobileExportCopy(doneCount: number, mode: 'share' | 'download' | 'zip')
   }
 
   if (mode === 'download') {
-    return '当前浏览器不支持文件分享，可逐张下载或改用 ZIP。';
+    return '当前浏览器不支持文件分享或图片较多，可批量下载到相册。';
   }
 
-  return '图片较多时手机端默认下载 ZIP，可能需要在文件 App 中解压。';
+  return '图片较多时手机端会逐张保存图片，避免下载 ZIP 后再解压。';
 }
 
 function statusText(job: BatchJob) {

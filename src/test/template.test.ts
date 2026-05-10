@@ -6,7 +6,9 @@ describe('template utilities', () => {
     const template = createDefaultTemplate();
 
     expect(template.textMode).toBe('filename');
-    expect(template.frameStyle).toBe('blur');
+    expect(template.frameLayout).toBe('stacked');
+    expect(template.frameStyle).toBe('solid');
+    expect(template.topBlockRatio).toBe(1);
     expect(getTemplateText(template, 'Summer Trip.JPG')).toBe('Summer Trip');
   });
 

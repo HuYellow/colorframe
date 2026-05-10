@@ -2,9 +2,11 @@ import type { FrameTemplate } from '../types';
 
 export function createDefaultTemplate(): FrameTemplate {
   return {
+    frameLayout: 'stacked',
     frameRatio: 0.07,
     cornerRadiusRatio: 0.025,
-    frameStyle: 'blur',
+    frameStyle: 'solid',
+    topBlockRatio: 1,
     textMode: 'filename',
     customText: '',
     textPosition: 'bottom',

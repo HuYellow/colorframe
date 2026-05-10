@@ -8,10 +8,14 @@ export type TextPosition = 'bottom' | 'top';
 
 export type FrameStyle = 'solid' | 'blur';
 
+export type FrameLayout = 'stacked' | 'surround';
+
 export type FrameTemplate = {
+  frameLayout: FrameLayout;
   frameRatio: number;
   cornerRadiusRatio: number;
   frameStyle: FrameStyle;
+  topBlockRatio: number;
   textMode: TextMode;
   customText: string;
   textPosition: TextPosition;
@@ -19,7 +23,10 @@ export type FrameTemplate = {
   exportQuality: number;
 };
 
-export type PhotoFrameSettings = Pick<FrameTemplate, 'frameRatio' | 'cornerRadiusRatio' | 'frameStyle'>;
+export type PhotoFrameSettings = Pick<
+  FrameTemplate,
+  'frameLayout' | 'frameRatio' | 'cornerRadiusRatio' | 'frameStyle' | 'topBlockRatio'
+>;
 
 export type PhotoTransform = {
   scale: number;
@@ -43,6 +50,20 @@ export type PhotoMetadataSummary = {
   hasGps?: boolean;
   latitude?: number;
   longitude?: number;
+  altitude?: number;
+  speed?: number;
+  speedRef?: string;
+  direction?: number;
+  exposureTime?: number;
+  fNumber?: number;
+  iso?: number;
+  focalLengthIn35mm?: number;
+};
+
+export type SmartAnalysis = {
+  title: string;
+  subtitle?: string;
+  detailLines: string[];
 };
 
 export type BatchJob = {
@@ -53,6 +74,7 @@ export type BatchJob = {
   progress: number;
   customText?: string;
   suggestedText?: string;
+  smartAnalysis?: SmartAnalysis;
   captionStatus?: SmartCaptionStatus;
   metadataSummary?: PhotoMetadataSummary;
   frameSettings?: PhotoFrameSettings;

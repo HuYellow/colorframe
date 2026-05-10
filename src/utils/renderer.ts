@@ -1,9 +1,10 @@
-import type { ColorTheme, FrameTemplate, PhotoTransform, RenderResult } from '../types';
+import type { ColorTheme, FrameTemplate, PhotoTransform, RenderResult, SmartAnalysis } from '../types';
 import { normalizePhotoTransform } from './photoTransform';
 import { getMimeType, getTemplateText } from './template';
 
 const PREVIEW_MAX_SIDE = 1600;
 const EXPORT_MAX_SIDE = 3000;
+const MIN_TEXT_FONT_SIZE = 12;
 
 export async function renderFramedImage({
   file,
@@ -12,6 +13,7 @@ export async function renderFramedImage({
   mode,
   photoText,
   photoTransform,
+  smartAnalysis,
   suggestedText,
 }: {
   file: File;
@@ -20,6 +22,7 @@ export async function renderFramedImage({
   mode: 'preview' | 'export';
   photoText?: string;
   photoTransform?: PhotoTransform;
+  smartAnalysis?: SmartAnalysis;
   suggestedText?: string;
 }): Promise<RenderResult> {
   const imageUrl = URL.createObjectURL(file);
@@ -32,6 +35,7 @@ export async function renderFramedImage({
     const imageHeight = Math.max(1, Math.round(image.naturalHeight * sourceScale));
     const shortSide = Math.min(imageWidth, imageHeight);
     const frame = Math.max(24, Math.round(shortSide * template.frameRatio));
+    const layout = computeCanvasLayout({ imageWidth, imageHeight, frame, template });
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
 
@@ -39,21 +43,26 @@ export async function renderFramedImage({
       throw new Error('Canvas 不可用');
     }
 
-    canvas.width = imageWidth + frame * 2;
-    canvas.height = imageHeight + frame * 2;
+    canvas.width = layout.canvasWidth;
+    canvas.height = layout.canvasHeight;
 
-    drawFrameBackground(context, image, canvas, theme, template.frameStyle);
+    if (template.frameLayout === 'stacked') {
+      context.fillStyle = theme.frameColor;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    } else {
+      drawFrameBackground(context, image, canvas, theme, template.frameStyle);
+    }
     drawRoundedImage(
       context,
       image,
-      frame,
-      frame,
-      imageWidth,
-      imageHeight,
-      Math.round(shortSide * template.cornerRadiusRatio),
+      layout.photoX,
+      layout.photoY,
+      layout.photoWidth,
+      layout.photoHeight,
+      template.frameLayout === 'stacked' ? 0 : Math.round(shortSide * template.cornerRadiusRatio),
       photoTransform,
     );
-    drawText(context, canvas, template, theme, file.name, frame, photoText, suggestedText);
+    drawText(context, template, theme, file.name, layout, frame, photoText, suggestedText, smartAnalysis);
 
     const blob = await canvasToBlob(canvas, getMimeType(template.exportFormat), template.exportQuality);
     const previewUrl = URL.createObjectURL(blob);
@@ -62,6 +71,91 @@ export async function renderFramedImage({
   } finally {
     URL.revokeObjectURL(imageUrl);
   }
+}
+
+export type CanvasLayout = {
+  canvasWidth: number;
+  canvasHeight: number;
+  photoX: number;
+  photoY: number;
+  photoWidth: number;
+  photoHeight: number;
+  textAreaX: number;
+  textAreaY: number;
+  textAreaWidth: number;
+  textAreaHeight: number;
+};
+
+export type SmartAnalysisLayout = {
+  textX: number;
+  titleY: number;
+  subtitleY?: number;
+  detailsY: number;
+  maxTextWidth: number;
+};
+
+export function computeSmartAnalysisLayout({
+  areaX,
+  areaY,
+  areaWidth,
+  areaHeight,
+  hasSubtitle = true,
+}: {
+  areaX: number;
+  areaY: number;
+  areaWidth: number;
+  areaHeight: number;
+  hasSubtitle?: boolean;
+}): SmartAnalysisLayout {
+  const maxTextWidth = Math.round(areaWidth * 0.42);
+  const textX = Math.round(areaX + (areaWidth - maxTextWidth) / 2);
+  const titleY = Math.round(areaY + areaHeight * 0.375);
+  const subtitleY = hasSubtitle ? Math.round(areaY + areaHeight * 0.508) : undefined;
+  const detailsY = Math.round(areaY + areaHeight * (hasSubtitle ? 0.642 : 0.525));
+
+  return { textX, titleY, subtitleY, detailsY, maxTextWidth };
+}
+
+export function computeCanvasLayout({
+  imageWidth,
+  imageHeight,
+  frame,
+  template,
+}: {
+  imageWidth: number;
+  imageHeight: number;
+  frame: number;
+  template: FrameTemplate;
+}): CanvasLayout {
+  if (template.frameLayout === 'stacked') {
+    const topBlockHeight = Math.max(1, Math.round(imageHeight * template.topBlockRatio));
+
+    return {
+      canvasWidth: imageWidth,
+      canvasHeight: imageHeight + topBlockHeight,
+      photoX: 0,
+      photoY: topBlockHeight,
+      photoWidth: imageWidth,
+      photoHeight: imageHeight,
+      textAreaX: 0,
+      textAreaY: 0,
+      textAreaWidth: imageWidth,
+      textAreaHeight: topBlockHeight,
+    };
+  }
+
+  return {
+    canvasWidth: imageWidth + frame * 2,
+    canvasHeight: imageHeight + frame * 2,
+    photoX: frame,
+    photoY: frame,
+    photoWidth: imageWidth,
+    photoHeight: imageHeight,
+    textAreaX: frame * 0.8,
+    textAreaY: template.textPosition === 'top' ? 0 : imageHeight + frame,
+    textAreaWidth: imageWidth + frame * 0.4,
+    textAreaHeight: frame,
+  };
 }
 
 function drawFrameBackground(
@@ -151,48 +245,192 @@ function getOffsetPixels(offset: number, drawSize: number, targetSize: number): 
 
 function drawText(
   context: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
   template: FrameTemplate,
   theme: ColorTheme,
   fileName: string,
+  layout: CanvasLayout,
   frame: number,
   photoText?: string,
   suggestedText?: string,
+  smartAnalysis?: SmartAnalysis,
 ) {
-  const text = getTemplateText(template, fileName, photoText, suggestedText);
-  if (!text) {
+  const renderMode = computeTextRenderMode({ template, fileName, photoText, suggestedText, smartAnalysis });
+  if (renderMode.kind === 'none') {
     return;
   }
 
-  const maxWidth = canvas.width - frame * 1.6;
-  const fontSize = Math.max(18, Math.min(54, Math.round(frame * 0.36)));
-  const y = template.textPosition === 'top' ? frame * 0.58 : canvas.height - frame * 0.38;
+  if (renderMode.kind === 'smartAnalysis') {
+    drawSmartAnalysis(context, theme, layout, renderMode.analysis);
+    return;
+  }
+
+  const lines = normalizeManualTextLines(renderMode.text);
+  if (!lines.length) {
+    return;
+  }
+
+  const textPadding = template.frameLayout === 'stacked' ? Math.max(20, layout.textAreaWidth * 0.12) : frame * 0.2;
+  const maxWidth = Math.max(1, layout.textAreaWidth - textPadding * 2);
+  const maxHeight = Math.max(1, layout.textAreaHeight * 0.72);
+  const initialFontSize =
+    template.frameLayout === 'stacked'
+      ? Math.max(18, Math.min(72, Math.round(layout.textAreaHeight * 0.16)))
+      : Math.max(18, Math.min(54, Math.round(frame * 0.36)));
+  const textLayout = layoutTextLines(context, lines, {
+    centerX: layout.textAreaX + layout.textAreaWidth / 2,
+    centerY: layout.textAreaY + layout.textAreaHeight / 2,
+    maxWidth,
+    maxHeight,
+    initialFontSize,
+  });
 
   context.save();
   context.fillStyle = theme.textColor;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.font = `600 ${fontSize}px "Aptos", "Segoe UI", sans-serif`;
-  fitText(context, text, canvas.width / 2, y, maxWidth, fontSize);
+  context.font = getTextFont(textLayout.fontSize);
+  textLayout.lines.forEach((line) => context.fillText(line.text, line.x, line.y, maxWidth));
   context.restore();
 }
 
-function fitText(
+export type TextRenderMode =
+  | { kind: 'none' }
+  | { kind: 'plainText'; text: string }
+  | { kind: 'smartAnalysis'; analysis: SmartAnalysis };
+
+export function computeTextRenderMode({
+  template,
+  fileName,
+  photoText,
+  suggestedText,
+  smartAnalysis,
+}: {
+  template: FrameTemplate;
+  fileName: string;
+  photoText?: string;
+  suggestedText?: string;
+  smartAnalysis?: SmartAnalysis;
+}): TextRenderMode {
+  const customPhotoText = photoText?.trim();
+  if (customPhotoText) {
+    return { kind: 'plainText', text: customPhotoText };
+  }
+
+  if (template.textMode === 'smart' && smartAnalysis) {
+    return { kind: 'smartAnalysis', analysis: smartAnalysis };
+  }
+
+  const text = getTemplateText(template, fileName, photoText, suggestedText);
+  return text ? { kind: 'plainText', text } : { kind: 'none' };
+}
+
+function drawSmartAnalysis(
   context: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  maxWidth: number,
-  initialFontSize: number,
+  theme: ColorTheme,
+  layout: CanvasLayout,
+  analysis: SmartAnalysis,
+) {
+  const smartLayout = computeSmartAnalysisLayout({
+    areaX: layout.textAreaX,
+    areaY: layout.textAreaY,
+    areaWidth: layout.textAreaWidth,
+    areaHeight: layout.textAreaHeight,
+    hasSubtitle: Boolean(analysis.subtitle),
+  });
+  const titleSize = Math.max(16, Math.min(42, Math.round(layout.textAreaHeight * 0.115)));
+  const subtitleSize = Math.max(12, Math.round(titleSize * 0.58));
+  const detailSize = Math.max(10, Math.round(titleSize * 0.38));
+  const detailLineHeight = Math.round(detailSize * 1.35);
+
+  context.save();
+  context.textAlign = 'left';
+  context.textBaseline = 'alphabetic';
+  context.fillStyle = theme.textColor;
+  context.font = `800 ${titleSize}px "Aptos", "Segoe UI", sans-serif`;
+  context.fillText(analysis.title, smartLayout.textX, smartLayout.titleY, smartLayout.maxTextWidth);
+
+  if (analysis.subtitle && smartLayout.subtitleY !== undefined) {
+    context.globalAlpha = 0.84;
+    context.font = `700 ${subtitleSize}px "Aptos", "Segoe UI", sans-serif`;
+    context.fillText(analysis.subtitle, smartLayout.textX, smartLayout.subtitleY, smartLayout.maxTextWidth);
+  }
+
+  context.globalAlpha = 0.46;
+  context.font = `600 ${detailSize}px "Aptos", "Segoe UI", sans-serif`;
+  analysis.detailLines.forEach((line, index) => {
+    context.fillText(line, smartLayout.textX, smartLayout.detailsY + index * detailLineHeight, smartLayout.maxTextWidth);
+  });
+  context.restore();
+}
+
+export function normalizeManualTextLines(text: string): string[] {
+  const lines = text.replace(/\r\n/g, '\n').split('\n').map((line) => line.trim());
+
+  while (lines[0] === '') {
+    lines.shift();
+  }
+
+  while (lines.at(-1) === '') {
+    lines.pop();
+  }
+
+  return lines;
+}
+
+export function layoutTextLines(
+  context: Pick<CanvasRenderingContext2D, 'font' | 'measureText'>,
+  lines: string[],
+  {
+    centerX,
+    centerY,
+    maxWidth,
+    maxHeight,
+    initialFontSize,
+  }: {
+    centerX: number;
+    centerY: number;
+    maxWidth: number;
+    maxHeight: number;
+    initialFontSize: number;
+  },
 ) {
   let fontSize = initialFontSize;
 
-  while (fontSize > 12 && context.measureText(text).width > maxWidth) {
+  while (fontSize > MIN_TEXT_FONT_SIZE && !doTextLinesFit(context, lines, fontSize, maxWidth, maxHeight)) {
     fontSize -= 1;
-    context.font = `600 ${fontSize}px "Aptos", "Segoe UI", sans-serif`;
   }
 
-  context.fillText(text, x, y, maxWidth);
+  context.font = getTextFont(fontSize);
+  const lineHeight = Math.round(fontSize * 1.34);
+  const totalHeight = lineHeight * lines.length;
+  const startY = centerY - totalHeight / 2 + lineHeight / 2;
+
+  return {
+    fontSize,
+    lines: lines.map((line, index) => ({
+      text: line,
+      x: centerX,
+      y: startY + index * lineHeight,
+    })),
+  };
+}
+
+function doTextLinesFit(
+  context: Pick<CanvasRenderingContext2D, 'font' | 'measureText'>,
+  lines: string[],
+  fontSize: number,
+  maxWidth: number,
+  maxHeight: number,
+) {
+  context.font = getTextFont(fontSize);
+  const lineHeight = Math.round(fontSize * 1.34);
+  const totalHeight = lineHeight * lines.length;
+
+  return totalHeight <= maxHeight && lines.every((line) => line === '' || context.measureText(line).width <= maxWidth);
+}
+
+function getTextFont(fontSize: number): string {
+  return `600 ${fontSize}px "Aptos", "Segoe UI", sans-serif`;
 }
 
 function roundedRectPath(
