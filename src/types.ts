@@ -1,0 +1,69 @@
+export type BatchJobStatus = 'pending' | 'processing' | 'done' | 'failed' | 'cancelled';
+
+export type ExportFormat = 'png' | 'jpeg' | 'webp';
+
+export type TextMode = 'filename' | 'custom' | 'smart' | 'none';
+
+export type TextPosition = 'bottom' | 'top';
+
+export type FrameStyle = 'solid' | 'blur';
+
+export type FrameTemplate = {
+  frameRatio: number;
+  cornerRadiusRatio: number;
+  frameStyle: FrameStyle;
+  textMode: TextMode;
+  customText: string;
+  textPosition: TextPosition;
+  exportFormat: ExportFormat;
+  exportQuality: number;
+};
+
+export type PhotoFrameSettings = Pick<FrameTemplate, 'frameRatio' | 'cornerRadiusRatio' | 'frameStyle'>;
+
+export type ColorTheme = {
+  dominantColor: string;
+  frameColor: string;
+  textColor: string;
+  surfaceColor: string;
+  palette: string[];
+};
+
+export type SmartCaptionStatus = 'idle' | 'ready' | 'failed';
+
+export type PhotoMetadataSummary = {
+  takenAt?: string;
+  camera?: string;
+  hasGps?: boolean;
+  latitude?: number;
+  longitude?: number;
+};
+
+export type BatchJob = {
+  id: string;
+  file: File;
+  originalName: string;
+  status: BatchJobStatus;
+  progress: number;
+  customText?: string;
+  suggestedText?: string;
+  captionStatus?: SmartCaptionStatus;
+  metadataSummary?: PhotoMetadataSummary;
+  frameSettings?: PhotoFrameSettings;
+  selectedFrameColor?: string;
+  themeColor?: string;
+  palette?: string[];
+  outputBlob?: Blob;
+  previewUrl?: string;
+  errorMessage?: string;
+};
+
+export type BatchSummary = Record<BatchJobStatus, number> & {
+  total: number;
+};
+
+export type RenderResult = {
+  blob: Blob;
+  previewUrl: string;
+  theme: ColorTheme;
+};
