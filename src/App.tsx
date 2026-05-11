@@ -5,7 +5,6 @@ import {
   ImagePlus,
   Images,
   Loader2,
-  PauseCircle,
   Play,
   Share2,
   SlidersHorizontal,
@@ -23,7 +22,6 @@ import {
   createZipBlobAsync,
   downloadBlob,
   formatTimestamp,
-  getMobileExportMode,
   isLikelyMobile,
 } from './utils/export';
 import { renderFramedImage } from './utils/renderer';
@@ -57,7 +55,6 @@ function App() {
   const [autoProcessBatchRequest, setAutoProcessBatchRequest] = useState<{ jobIds: string[]; nonce: number } | null>(
     null,
   );
-  const cancelRef = useRef(false);
   const autoGenerateNonceRef = useRef(0);
   const autoProcessBatchNonceRef = useRef(0);
   const jobsRef = useRef<BatchJob[]>([]);
@@ -74,9 +71,6 @@ function App() {
   const doneJobs = jobs.filter((job) => job.status === 'done' && job.outputBlob);
   const downloadableSelectedJob = selectedJob?.status === 'done' && selectedJob.outputBlob ? selectedJob : undefined;
   const shareFiles = useMemo(() => doneJobs.map((job) => toShareFile(job, template)), [doneJobs, template]);
-  const mobileExportMode = isMobile
-    ? getMobileExportMode({ count: doneJobs.length, canShareFiles: shareFiles.length > 0 && canShareFiles(shareFiles) })
-    : 'zip';
   const isBusy = isProcessing || isAutoGenerating;
 
   useEffect(() => {
@@ -179,7 +173,6 @@ function App() {
       return;
     }
 
-    cancelRef.current = false;
     isProcessingRef.current = true;
     setIsProcessing(true);
     setAutoGenerateRequest(null);
@@ -204,14 +197,6 @@ function App() {
     for (const job of queue) {
       if (job.status === 'failed') {
         continue;
-      }
-
-      if (cancelRef.current) {
-        setJobs((current) =>
-          current.map((item) => (item.status === 'pending' ? { ...item, status: 'cancelled', progress: 0 } : item)),
-        );
-        setMessage('批量任务已取消，已生成的图片仍可导出。');
-        break;
       }
 
       setSelectedId(job.id);
@@ -281,11 +266,6 @@ function App() {
 
     isProcessingRef.current = false;
     setIsProcessing(false);
-    cancelRef.current = false;
-  }
-
-  function cancelBatch() {
-    cancelRef.current = true;
   }
 
   async function exportZip() {
@@ -311,7 +291,7 @@ function App() {
     }
 
     if (!canShareFiles(shareFiles)) {
-      setMessage('当前浏览器不支持批量分享图片，可批量下载到相册。');
+      setMessage('当前浏览器不支持系统保存/分享图片，请更换浏览器或使用桌面端下载。');
       return;
     }
 
@@ -323,24 +303,8 @@ function App() {
       });
       setMessage('已打开系统分享面板。');
     } catch {
-      setMessage('分享已取消或失败，可以批量下载到相册。');
+      setMessage('分享已取消或失败，可以重新点击保存/分享图片。');
     }
-  }
-
-  function downloadBatchToAlbum() {
-    if (!doneJobs.length) {
-      return;
-    }
-
-    const usedNames = new Set<string>();
-    doneJobs.forEach((job) => {
-      if (!job.outputBlob) {
-        return;
-      }
-
-      downloadBlob(job.outputBlob, buildOutputFileName(job.originalName, template.exportFormat, usedNames));
-    });
-    setMessage(`已开始保存 ${doneJobs.length} 张图片，请在相册或下载记录中查看。`);
   }
 
   function downloadOne(job: BatchJob) {
@@ -667,6 +631,7 @@ function App() {
             <StatusStrip summary={summary} />
             <JobList
               jobs={jobs}
+              showDownloads={!isMobile}
               selectedId={selectedJob?.id}
               sourceUrls={sourceUrls}
               onSelect={setSelectedId}
@@ -706,10 +671,6 @@ function App() {
                   isExporting={isExporting}
                   isMobile={isMobile}
                   isBusy={isBusy}
-                  isProcessing={isProcessing}
-                  mobileExportMode={mobileExportMode}
-                  onCancel={cancelBatch}
-                  onDownloadBatch={downloadBatchToAlbum}
                   onDownloadCurrent={() => downloadableSelectedJob && downloadOne(downloadableSelectedJob)}
                   onProcess={processBatch}
                   onShare={shareResults}
@@ -740,7 +701,7 @@ function App() {
                 <Archive size={18} />
                 <h2>导出策略</h2>
               </div>
-              <p>{isMobile ? mobileExportCopy(doneJobs.length, mobileExportMode) : '桌面端批量结果默认打包为 ZIP。'}</p>
+              <p>{isMobile ? mobileExportCopy(doneJobs.length) : '桌面端批量结果默认打包为 ZIP。'}</p>
               {!isMobile ? (
                 <ActionButtons
                   canProcess={canProcess}
@@ -748,10 +709,6 @@ function App() {
                   isExporting={isExporting}
                   isMobile={isMobile}
                   isBusy={isBusy}
-                  isProcessing={isProcessing}
-                  mobileExportMode={mobileExportMode}
-                  onCancel={cancelBatch}
-                  onDownloadBatch={downloadBatchToAlbum}
                   onDownloadCurrent={() => downloadableSelectedJob && downloadOne(downloadableSelectedJob)}
                   onProcess={processBatch}
                   onShare={shareResults}
@@ -812,12 +769,14 @@ function StatusStrip({ summary }: { summary: ReturnType<typeof summarizeJobs> })
 
 function JobList({
   jobs,
+  showDownloads,
   selectedId,
   sourceUrls,
   onSelect,
   onDownload,
 }: {
   jobs: BatchJob[];
+  showDownloads: boolean;
   selectedId?: string;
   sourceUrls: Record<string, string>;
   onSelect: (id: string) => void;
@@ -850,14 +809,14 @@ function JobList({
               {statusIcon(job)}
             </span>
           </button>
-          {job.outputBlob ? (
-          <button
-            aria-label={`下载 ${job.originalName}`}
-            className="icon-download"
-            data-testid={`download-job-${job.id}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              onDownload(job);
+          {showDownloads && job.outputBlob ? (
+            <button
+              aria-label={`下载 ${job.originalName}`}
+              className="icon-download"
+              data-testid={`download-job-${job.id}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onDownload(job);
               }}
               type="button"
             >
@@ -1197,10 +1156,6 @@ function ActionButtons({
   isExporting,
   isMobile,
   isBusy,
-  isProcessing,
-  mobileExportMode,
-  onCancel,
-  onDownloadBatch,
   onDownloadCurrent,
   onProcess,
   onShare,
@@ -1212,10 +1167,6 @@ function ActionButtons({
   isExporting: boolean;
   isMobile: boolean;
   isBusy: boolean;
-  isProcessing: boolean;
-  mobileExportMode: 'share' | 'download' | 'zip';
-  onCancel: () => void;
-  onDownloadBatch: () => void;
   onDownloadCurrent: () => void;
   onProcess: () => void;
   onShare: () => void;
@@ -1234,38 +1185,10 @@ function ActionButtons({
         {isBusy ? <Loader2 className="spin" size={18} /> : <Play size={18} />}
         批量生成
       </button>
-      <button className="secondary-action" disabled={!isProcessing} onClick={onCancel} type="button">
-        <PauseCircle size={18} />
-        取消
-      </button>
-      {isMobile && mobileExportMode === 'share' ? (
+      {isMobile ? (
         <button className="primary-action" disabled={!doneCount} onClick={onShare} type="button">
           <Share2 size={18} />
           保存/分享图片
-        </button>
-      ) : null}
-      {isMobile && mobileExportMode === 'download' ? (
-        <button
-          className="primary-action"
-          data-testid="download-batch"
-          disabled={!doneCount}
-          onClick={onDownloadBatch}
-          type="button"
-        >
-          <Images size={18} />
-          批量下载到相册
-        </button>
-      ) : null}
-      {isMobile && selectedDone ? (
-        <button
-          className="secondary-action"
-          data-testid="download-current"
-          disabled={!selectedDone}
-          onClick={onDownloadCurrent}
-          type="button"
-        >
-          <Download size={18} />
-          下载当前图片
         </button>
       ) : null}
       {!isMobile ? (
@@ -1290,20 +1213,12 @@ function ActionButtons({
   );
 }
 
-function mobileExportCopy(doneCount: number, mode: 'share' | 'download' | 'zip') {
+function mobileExportCopy(doneCount: number) {
   if (!doneCount) {
-    return '移动端完成生成后，会优先显示分享/保存入口。';
+    return '移动端完成生成后，可通过系统分享面板保存或转发图片。';
   }
 
-  if (mode === 'share') {
-    return `${doneCount} 张图片适合用系统分享面板保存或转发。`;
-  }
-
-  if (mode === 'download') {
-    return '当前浏览器不支持文件分享或图片较多，可批量下载到相册。';
-  }
-
-  return '图片较多时手机端会逐张保存图片，避免下载 ZIP 后再解压。';
+  return `${doneCount} 张图片可通过系统分享面板保存或转发。`;
 }
 
 function statusText(job: BatchJob) {

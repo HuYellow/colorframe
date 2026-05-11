@@ -76,6 +76,7 @@ describe('ColorFrame app', () => {
     expect(screen.getByRole('heading', { name: /ColorFrame/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/选择照片/i)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /批量生成/i })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: /取消/i })).not.toBeInTheDocument();
     expect(screen.getByText(/导出策略/i)).toBeInTheDocument();
   });
 
@@ -350,7 +351,7 @@ describe('ColorFrame app', () => {
     expect(lastCreatedAnchor).toHaveAttribute('download', 'b_colorframe.png');
   });
 
-  it('uses the selected-photo download path for mobile browsers that cannot share files', async () => {
+  it('keeps only process and share actions on mobile browsers that cannot share files', async () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
@@ -374,14 +375,19 @@ describe('ColorFrame app', () => {
     ]);
     await waitFor(() => expect(mocks.renderFramedImage).toHaveBeenCalledTimes(2));
     await user.click(screen.getByRole('button', { name: /^b\.jpg/i }));
-    await user.click(screen.getByRole('button', { name: /下载当前图片/i }));
 
     expect(shareSpy).not.toHaveBeenCalled();
-    expect(downloadClick).toHaveBeenCalledTimes(1);
-    expect(lastCreatedAnchor).toHaveAttribute('download', 'b_colorframe.png');
+    expect(screen.queryByTestId('download-current')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('download-batch')).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId(/^download-job-/)).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: /保存\/分享图片/i }));
+
+    expect(shareSpy).not.toHaveBeenCalled();
+    expect(downloadClick).not.toHaveBeenCalled();
   });
 
-  it('replaces the mobile ZIP choice with batch downloads to the album', async () => {
+  it('keeps mobile batch export on the share/save path even for larger batches', async () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
@@ -390,6 +396,11 @@ describe('ColorFrame app', () => {
     Object.defineProperty(navigator, 'canShare', {
       configurable: true,
       value: vi.fn().mockReturnValue(true),
+    });
+    const shareSpy = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: shareSpy,
     });
     const user = userEvent.setup();
     render(<App />);
@@ -401,10 +412,12 @@ describe('ColorFrame app', () => {
     await waitFor(() => expect(mocks.renderFramedImage).toHaveBeenCalledTimes(10));
 
     expect(screen.queryByRole('button', { name: /下载 ZIP/i })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /批量下载到相册/i }));
+    expect(screen.queryByTestId('download-batch')).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId(/^download-job-/)).toHaveLength(0);
+    await user.click(screen.getByRole('button', { name: /保存\/分享图片/i }));
 
-    expect(downloadClick).toHaveBeenCalledTimes(10);
-    expect(lastCreatedAnchor).toHaveAttribute('download', 'photo-10_colorframe.png');
+    expect(shareSpy).toHaveBeenCalledTimes(1);
+    expect(downloadClick).not.toHaveBeenCalled();
   });
 
   it('auto generates the first uploaded photo with the default template after half a second', async () => {

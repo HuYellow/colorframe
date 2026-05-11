@@ -7,9 +7,9 @@ ColorFrame is a pure frontend photo framing tool. It analyzes uploaded photos lo
 - Single and batch photo upload
 - Per-image theme color extraction
 - Canvas-based frame and text rendering
-- Batch queue with progress, cancel, and failure isolation
+- Batch queue with progress and failure isolation
 - Desktop ZIP export
-- Mobile share/save first, ZIP fallback
+- Mobile share/save export
 - Responsive desktop and mobile layout
 
 Photos stay on the device and are not uploaded to a server.

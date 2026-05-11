@@ -1,8 +1,6 @@
 import { zipSync } from 'fflate';
 import type { BatchJob, ExportFormat } from '../types';
 
-export type MobileExportMode = 'share' | 'download' | 'zip';
-
 export function buildOutputFileName(originalName: string, format: ExportFormat, usedNames: Set<string>): string {
   const extension = format === 'jpeg' ? 'jpg' : format;
   const base = originalName.replace(/\.[^/.]+$/, '') || 'image';
@@ -16,20 +14,6 @@ export function buildOutputFileName(originalName: string, format: ExportFormat, 
 
   usedNames.add(candidate.toLowerCase());
   return candidate;
-}
-
-export function getMobileExportMode({
-  count,
-  canShareFiles,
-}: {
-  count: number;
-  canShareFiles: boolean;
-}): MobileExportMode {
-  if (count >= 10) {
-    return 'download';
-  }
-
-  return canShareFiles ? 'share' : 'download';
 }
 
 export function isLikelyMobile(): boolean {

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 
 async function createTestPng(page: Page) {
   const imageBase64 = await page.evaluate(() => {
@@ -46,6 +46,26 @@ async function uploadImages(page: Page, files: Array<{ name: string; mimeType: s
   await page.getByTestId('photo-upload').setInputFiles(files);
 }
 
+function isMobileProject(testInfo: TestInfo) {
+  return testInfo.project.name === 'mobile-chrome';
+}
+
+async function expectGeneratedExportReady(page: Page, testInfo: TestInfo, desktopDownloadCount?: number) {
+  if (isMobileProject(testInfo)) {
+    await expect(page.getByRole('button', { name: '保存/分享图片' })).toBeEnabled({ timeout: 10000 });
+    await expect(page.getByTestId('download-current')).toHaveCount(0);
+    await expect(page.locator('.icon-download')).toHaveCount(0);
+    return;
+  }
+
+  if (typeof desktopDownloadCount === 'number') {
+    await expect(page.locator('.icon-download')).toHaveCount(desktopDownloadCount, { timeout: 10000 });
+    return;
+  }
+
+  await expect(page.getByTestId('download-current')).toBeEnabled({ timeout: 10000 });
+}
+
 test('loads the ColorFrame workspace', async ({ page }) => {
   await page.goto('/');
 
@@ -54,7 +74,7 @@ test('loads the ColorFrame workspace', async ({ page }) => {
   await expect(page.getByTestId('process-batch')).toBeVisible();
 });
 
-test('auto processes multiple uploaded images', async ({ page }) => {
+test('auto processes multiple uploaded images', async ({ page }, testInfo) => {
   await page.goto('/');
 
   const image = await createTestPng(page);
@@ -65,31 +85,31 @@ test('auto processes multiple uploaded images', async ({ page }) => {
 
   await expect(page.getByRole('button', { name: /^first\.png/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^second\.png/ })).toBeVisible();
-  await expect(page.locator('.icon-download')).toHaveCount(2, { timeout: 10000 });
+  await expectGeneratedExportReady(page, testInfo, 2);
 });
 
-test('processes a real image through the default batch flow', async ({ page }) => {
+test('processes a real image through the default batch flow', async ({ page }, testInfo) => {
   await page.goto('/');
 
   await uploadImages(page, [{ name: 'palette.png', mimeType: 'image/png', buffer: await createTestPng(page) }]);
   await page.getByTestId('process-batch').click();
 
-  await expect(page.locator('.icon-download')).toHaveCount(1, { timeout: 10000 });
+  await expectGeneratedExportReady(page, testInfo, 1);
 });
 
-test('auto generates a default preview after upload', async ({ page }) => {
+test('auto generates a default preview after upload', async ({ page }, testInfo) => {
   await page.goto('/');
 
   await uploadImages(page, [{ name: 'default.png', mimeType: 'image/png', buffer: await createTestPng(page) }]);
 
-  await expect(page.getByTestId('download-current')).toBeEnabled({ timeout: 10000 });
+  await expectGeneratedExportReady(page, testInfo);
 });
 
-test('clips the lower photo so it cannot cover stacked text area', async ({ page }) => {
+test('clips the lower photo so it cannot cover stacked text area', async ({ page }, testInfo) => {
   await page.goto('/');
 
   await uploadImages(page, [{ name: 'tall.png', mimeType: 'image/png', buffer: await createTallMagentaPng(page) }]);
-  await expect(page.getByTestId('download-current')).toBeEnabled({ timeout: 10000 });
+  await expectGeneratedExportReady(page, testInfo);
   await page.getByTestId('frame-color-000000').click();
 
   await page.waitForFunction(
@@ -153,16 +173,16 @@ test('switches layout, palette color, and frame style', async ({ page }) => {
   await expect(page.getByTestId('frame-color-000000')).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('auto regenerates the selected image after editing text', async ({ page }) => {
+test('auto regenerates the selected image after editing text', async ({ page }, testInfo) => {
   await page.goto('/');
 
   await uploadImages(page, [{ name: 'auto.png', mimeType: 'image/png', buffer: await createTestPng(page) }]);
   await page.getByTestId('photo-text-input').fill('Auto caption');
 
-  await expect(page.getByTestId('download-current')).toBeEnabled({ timeout: 10000 });
+  await expectGeneratedExportReady(page, testInfo);
 });
 
-test('adjusts the selected image composition with sliders', async ({ page }) => {
+test('adjusts the selected image composition with sliders', async ({ page }, testInfo) => {
   await page.goto('/');
 
   await uploadImages(page, [{ name: 'compose.png', mimeType: 'image/png', buffer: await createTestPng(page) }]);
@@ -188,10 +208,12 @@ test('adjusts the selected image composition with sliders', async ({ page }) => 
   await expect(page.getByTestId('photo-scale-input')).toHaveValue('1.5');
   await expect(page.getByTestId('photo-offset-x-input')).toHaveValue('30');
   await expect(page.getByTestId('photo-offset-y-input')).toHaveValue('-20');
-  await expect(page.getByTestId('download-current')).toBeEnabled({ timeout: 10000 });
+  await expectGeneratedExportReady(page, testInfo);
 });
 
-test('downloads the currently selected image', async ({ page }) => {
+test('downloads the currently selected image', async ({ page }, testInfo) => {
+  test.skip(isMobileProject(testInfo), 'Current-image downloads are desktop-only.');
+
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'canShare', {
       configurable: true,
@@ -214,4 +236,28 @@ test('downloads the currently selected image', async ({ page }) => {
   const download = await downloadPromise;
 
   expect(download.suggestedFilename()).toBe('second_colorframe.png');
+});
+
+test('mobile export controls only show process and share actions', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: () => true,
+    });
+  });
+  await page.goto('/');
+
+  await uploadImages(page, [
+    { name: 'mobile-first.png', mimeType: 'image/png', buffer: await createTestPng(page) },
+    { name: 'mobile-second.png', mimeType: 'image/png', buffer: await createTestPng(page) },
+  ]);
+
+  await expect(page.getByRole('button', { name: '保存/分享图片' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByTestId('process-batch')).toBeVisible();
+  await expect(page.getByTestId('download-current')).toHaveCount(0);
+  await expect(page.getByTestId('download-batch')).toHaveCount(0);
+  await expect(page.locator('.icon-download')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '下载 ZIP' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '取消' })).toHaveCount(0);
 });
