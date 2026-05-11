@@ -10,11 +10,11 @@ import {
 } from '../utils/renderer';
 
 describe('renderer photo composition', () => {
-  it('uses a top color block above the photo for stacked layouts', () => {
+  it('uses a 3:4 stacked canvas with a 4:3 lower photo band', () => {
     expect(
       computeCanvasLayout({
         imageWidth: 400,
-        imageHeight: 300,
+        imageHeight: 600,
         frame: 40,
         template: {
           frameLayout: 'stacked',
@@ -24,22 +24,22 @@ describe('renderer photo composition', () => {
           textMode: 'filename',
           customText: '',
           textPosition: 'bottom',
-          topBlockRatio: 1,
+          topBlockRatio: 7 / 9,
           exportFormat: 'png',
           exportQuality: 0.92,
         },
       }),
     ).toEqual({
       canvasWidth: 400,
-      canvasHeight: 600,
+      canvasHeight: 533,
       photoX: 0,
-      photoY: 300,
+      photoY: 233,
       photoWidth: 400,
       photoHeight: 300,
       textAreaX: 0,
       textAreaY: 0,
       textAreaWidth: 400,
-      textAreaHeight: 300,
+      textAreaHeight: 233,
     });
   });
 

@@ -113,7 +113,7 @@ describe('ColorFrame app', () => {
         template: expect.objectContaining({
           frameLayout: 'stacked',
           frameStyle: 'solid',
-          topBlockRatio: 1,
+          topBlockRatio: 7 / 9,
           textMode: 'filename',
         }),
       }),
@@ -125,7 +125,7 @@ describe('ColorFrame app', () => {
         template: expect.objectContaining({
           frameLayout: 'stacked',
           frameStyle: 'solid',
-          topBlockRatio: 1,
+          topBlockRatio: 7 / 9,
           textMode: 'filename',
         }),
       }),
@@ -264,7 +264,7 @@ describe('ColorFrame app', () => {
     render(<App />);
 
     expect(screen.getByRole('button', { name: /上色块下图/i })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByLabelText(/色块高度/i)).toHaveValue('1');
+    expect(screen.getByLabelText(/色块高度/i)).toHaveValue(String(7 / 9));
     expect(screen.queryByRole('button', { name: /高斯模糊/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /色框包围/i }));
@@ -302,7 +302,7 @@ describe('ColorFrame app', () => {
     await user.click(screen.getByRole('button', { name: /^b\.jpg/i }));
 
     expect(screen.getByRole('button', { name: /上色块下图/i })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByLabelText(/色块高度/i)).toHaveValue('1');
+    expect(screen.getByLabelText(/色块高度/i)).toHaveValue(String(7 / 9));
   });
 
   it('applies the current frame settings to other photos without changing their frame colors', async () => {
@@ -436,7 +436,7 @@ describe('ColorFrame app', () => {
         template: expect.objectContaining({
           frameLayout: 'stacked',
           frameStyle: 'solid',
-          topBlockRatio: 1,
+          topBlockRatio: 7 / 9,
           textMode: 'filename',
         }),
       }),

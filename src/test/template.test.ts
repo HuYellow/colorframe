@@ -8,7 +8,7 @@ describe('template utilities', () => {
     expect(template.textMode).toBe('filename');
     expect(template.frameLayout).toBe('stacked');
     expect(template.frameStyle).toBe('solid');
-    expect(template.topBlockRatio).toBe(1);
+    expect(template.topBlockRatio).toBe(7 / 9);
     expect(getTemplateText(template, 'Summer Trip.JPG')).toBe('Summer Trip');
   });
 

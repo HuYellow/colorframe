@@ -142,15 +142,16 @@ export function computeCanvasLayout({
   template: FrameTemplate;
 }): CanvasLayout {
   if (template.frameLayout === 'stacked') {
-    const topBlockHeight = Math.max(1, Math.round(imageHeight * template.topBlockRatio));
+    const photoHeight = Math.max(1, Math.round(imageWidth * 0.75));
+    const topBlockHeight = Math.max(1, Math.round(photoHeight * template.topBlockRatio));
 
     return {
       canvasWidth: imageWidth,
-      canvasHeight: imageHeight + topBlockHeight,
+      canvasHeight: photoHeight + topBlockHeight,
       photoX: 0,
       photoY: topBlockHeight,
       photoWidth: imageWidth,
-      photoHeight: imageHeight,
+      photoHeight,
       textAreaX: 0,
       textAreaY: 0,
       textAreaWidth: imageWidth,
@@ -212,7 +213,12 @@ function drawRoundedImage(
   });
 
   if (radius <= 0) {
+    context.save();
+    context.beginPath();
+    context.rect(x, y, width, height);
+    context.clip();
     context.drawImage(image, x + drawRect.x, y + drawRect.y, drawRect.width, drawRect.height);
+    context.restore();
     return;
   }
 

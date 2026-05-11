@@ -994,7 +994,7 @@ function TemplateControls({
             data-testid="top-block-ratio-input"
             max="1.2"
             min="0.35"
-            step="0.05"
+            step="any"
             type="range"
             value={frameTemplate.topBlockRatio}
             onChange={(event) => onFrameSettingsChange({ topBlockRatio: Number(event.target.value) })}

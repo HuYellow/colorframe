@@ -6,7 +6,7 @@ export function createDefaultTemplate(): FrameTemplate {
     frameRatio: 0.07,
     cornerRadiusRatio: 0.025,
     frameStyle: 'solid',
-    topBlockRatio: 1,
+    topBlockRatio: 7 / 9,
     textMode: 'filename',
     customText: '',
     textPosition: 'bottom',

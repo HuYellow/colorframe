@@ -22,6 +22,26 @@ async function createTestPng(page: Page) {
   return Buffer.from(imageBase64, 'base64');
 }
 
+async function createTallMagentaPng(page: Page) {
+  const imageBase64 = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 600;
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      throw new Error('missing canvas context');
+    }
+
+    context.fillStyle = '#ff00cc';
+    context.fillRect(0, 0, 400, 600);
+
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+
+  return Buffer.from(imageBase64, 'base64');
+}
+
 async function uploadImages(page: Page, files: Array<{ name: string; mimeType: string; buffer: Buffer }>) {
   await page.getByTestId('photo-upload').setInputFiles(files);
 }
@@ -65,6 +85,37 @@ test('auto generates a default preview after upload', async ({ page }) => {
   await expect(page.getByTestId('download-current')).toBeEnabled({ timeout: 10000 });
 });
 
+test('clips the lower photo so it cannot cover stacked text area', async ({ page }) => {
+  await page.goto('/');
+
+  await uploadImages(page, [{ name: 'tall.png', mimeType: 'image/png', buffer: await createTallMagentaPng(page) }]);
+  await expect(page.getByTestId('download-current')).toBeEnabled({ timeout: 10000 });
+  await page.getByTestId('frame-color-000000').click();
+
+  await page.waitForFunction(
+    () => {
+      const image = document.querySelector('.preview-canvas img');
+      if (!(image instanceof HTMLImageElement) || !image.complete || !image.naturalWidth || !image.naturalHeight) {
+        return false;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        return false;
+      }
+
+      context.drawImage(image, 0, 0);
+      const [red, green, blue] = context.getImageData(12, Math.round(image.naturalHeight * 0.35), 1, 1).data;
+      return red < 8 && green < 8 && blue < 8;
+    },
+    undefined,
+    { timeout: 10000 },
+  );
+});
+
 test('stores custom text per selected photo', async ({ page }) => {
   await page.goto('/');
 
@@ -88,7 +139,7 @@ test('switches layout, palette color, and frame style', async ({ page }) => {
   await uploadImages(page, [{ name: 'first.png', mimeType: 'image/png', buffer: Buffer.from('not-a-real-image') }]);
 
   await expect(page.getByTestId('frame-layout-stacked')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('top-block-ratio-input')).toHaveValue('1');
+  expect(Number(await page.getByTestId('top-block-ratio-input').inputValue())).toBeCloseTo(7 / 9, 12);
   await expect(page.getByTestId('frame-color-ffffff')).toBeVisible();
   await expect(page.getByTestId('frame-color-000000')).toBeVisible();
 
