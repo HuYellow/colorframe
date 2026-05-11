@@ -1,8 +1,15 @@
 @import 'tailwindcss';
 
+@font-face {
+  font-family: 'Isenheim';
+  font-style: normal;
+  font-weight: 400;
+  src: url('./assets/fonts/Isenheim_Regulier.otf') format('opentype');
+}
+
 :root {
   font-family:
-    ui-serif, 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
+    'Isenheim', 'SimSun', '宋体', 'Songti SC', 'STSong', 'Source Han Serif SC', 'Noto Serif CJK SC', serif;
   color: #211d18;
   background: #fbfaf7;
   font-synthesis: none;
@@ -13,6 +20,8 @@
   --panel: #fffffc;
   --line: #e8e2d8;
   --active-color: #9f7355;
+  --caption-font: 'Isenheim', 'SimSun', '宋体', 'Songti SC', 'STSong', 'Source Han Serif SC', 'Noto Serif CJK SC',
+    serif;
 }
 
 * {
@@ -27,7 +36,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -399,6 +409,7 @@ button:disabled {
 }
 
 .field textarea {
+  font-family: var(--caption-font);
   line-height: 1.45;
   min-height: 84px;
   padding: 10px 12px;

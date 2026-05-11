@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeCanvasLayout,
+  ensureCaptionFontReady,
   computeTextRenderMode,
   computePhotoDrawRect,
   computeSmartAnalysisLayout,
@@ -98,6 +99,39 @@ describe('renderer photo composition', () => {
     expect(layout.lines).toHaveLength(3);
     expect(layout.lines[0]).toMatchObject({ text: 'Stanley, Hong Kong', x: 200 });
     expect(layout.lines[2].y).toBeGreaterThan(layout.lines[0].y);
+  });
+
+  it('uses Isenheim with Songti fallbacks as the default caption font', () => {
+    const context = {
+      font: '',
+      measureText: (text: string) => ({ width: text.length * 10 }),
+    } as CanvasRenderingContext2D;
+
+    layoutTextLines(context, ['森林公园 new year'], {
+      centerX: 200,
+      centerY: 150,
+      maxWidth: 320,
+      maxHeight: 120,
+      initialFontSize: 32,
+    });
+
+    expect(context.font).toBe(
+      '400 32px "Isenheim", "SimSun", "宋体", "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC", serif',
+    );
+  });
+
+  it('waits for the bundled caption font before canvas rendering', async () => {
+    const loadCalls: string[] = [];
+    const fonts = {
+      load: async (font: string) => {
+        loadCalls.push(font);
+        return [];
+      },
+    };
+
+    await ensureCaptionFontReady(fonts);
+
+    expect(loadCalls).toEqual(['400 32px "Isenheim"']);
   });
 
   it('lays out smart analysis as centered metadata copy without a leading color chip', () => {

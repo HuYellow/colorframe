@@ -5,6 +5,8 @@ import { getMimeType, getTemplateText } from './template';
 const PREVIEW_MAX_SIDE = 1600;
 const EXPORT_MAX_SIDE = 3000;
 const MIN_TEXT_FONT_SIZE = 12;
+const CAPTION_FONT_FAMILY =
+  '"Isenheim", "SimSun", "宋体", "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC", serif';
 
 export async function renderFramedImage({
   file,
@@ -29,6 +31,8 @@ export async function renderFramedImage({
   const image = await loadImage(imageUrl);
 
   try {
+    await ensureCaptionFontReady();
+
     const sourceMaxSide = mode === 'preview' ? PREVIEW_MAX_SIDE : EXPORT_MAX_SIDE;
     const sourceScale = Math.min(1, sourceMaxSide / Math.max(image.naturalWidth, image.naturalHeight));
     const imageWidth = Math.max(1, Math.round(image.naturalWidth * sourceScale));
@@ -71,6 +75,16 @@ export async function renderFramedImage({
   } finally {
     URL.revokeObjectURL(imageUrl);
   }
+}
+
+type FontLoader = Pick<FontFaceSet, 'load'>;
+
+export async function ensureCaptionFontReady(fonts: FontLoader | undefined = document.fonts): Promise<void> {
+  if (!fonts) {
+    return;
+  }
+
+  await fonts.load('400 32px "Isenheim"');
 }
 
 export type CanvasLayout = {
@@ -346,17 +360,17 @@ function drawSmartAnalysis(
   context.textAlign = 'left';
   context.textBaseline = 'alphabetic';
   context.fillStyle = theme.textColor;
-  context.font = `800 ${titleSize}px "Aptos", "Segoe UI", sans-serif`;
+  context.font = getTextFont(titleSize);
   context.fillText(analysis.title, smartLayout.textX, smartLayout.titleY, smartLayout.maxTextWidth);
 
   if (analysis.subtitle && smartLayout.subtitleY !== undefined) {
     context.globalAlpha = 0.84;
-    context.font = `700 ${subtitleSize}px "Aptos", "Segoe UI", sans-serif`;
+    context.font = getTextFont(subtitleSize);
     context.fillText(analysis.subtitle, smartLayout.textX, smartLayout.subtitleY, smartLayout.maxTextWidth);
   }
 
   context.globalAlpha = 0.46;
-  context.font = `600 ${detailSize}px "Aptos", "Segoe UI", sans-serif`;
+  context.font = getTextFont(detailSize);
   analysis.detailLines.forEach((line, index) => {
     context.fillText(line, smartLayout.textX, smartLayout.detailsY + index * detailLineHeight, smartLayout.maxTextWidth);
   });
@@ -430,7 +444,7 @@ function doTextLinesFit(
 }
 
 function getTextFont(fontSize: number): string {
-  return `600 ${fontSize}px "Aptos", "Segoe UI", sans-serif`;
+  return `400 ${fontSize}px ${CAPTION_FONT_FAMILY}`;
 }
 
 function roundedRectPath(

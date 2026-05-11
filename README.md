@@ -23,6 +23,10 @@ npm run dev
 
 Open http://127.0.0.1:5173/.
 
+## Fonts
+
+Default caption text uses bundled Isenheim for Latin text, then local Songti-compatible fonts for Chinese text. Isenheim is distributed under the SIL Open Font License 1.1; the license copy lives at `src/assets/fonts/Isenheim-LICENSE.txt`.
+
 ## Verification
 
 ```bash
