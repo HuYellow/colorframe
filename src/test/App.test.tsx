@@ -578,7 +578,7 @@ describe('ColorFrame app', () => {
     expect(screen.getByTestId('photo-offset-y-input')).toHaveValue('0');
   });
 
-  it('updates composition offsets when dragging the preview', async () => {
+  it('keeps composition offsets unchanged when dragging the preview', async () => {
     vi.useFakeTimers();
     render(<App />);
 
@@ -589,17 +589,18 @@ describe('ColorFrame app', () => {
     fireEvent.pointerDown(previewCanvas, { button: 0, clientX: 100, clientY: 100, pointerId: 1 });
     fireEvent.pointerUp(previewCanvas, { clientX: 130, clientY: 80, pointerId: 1 });
 
-    expect(screen.getByTestId('photo-offset-x-input')).toHaveValue('12');
-    expect(screen.getByTestId('photo-offset-y-input')).toHaveValue('-8');
+    expect(screen.getByTestId('photo-offset-x-input')).toHaveValue('0');
+    expect(screen.getByTestId('photo-offset-y-input')).toHaveValue('0');
 
     await act(async () => {
       vi.advanceTimersByTime(500);
       await Promise.resolve();
     });
 
+    expect(mocks.renderFramedImage).toHaveBeenCalledTimes(1);
     expect(mocks.renderFramedImage).toHaveBeenCalledWith(
       expect.objectContaining({
-        photoTransform: { scale: 1, offsetX: 12, offsetY: -8 },
+        photoTransform: { scale: 1, offsetX: 0, offsetY: 0 },
       }),
     );
   });

@@ -42,8 +42,6 @@ import {
 const DEFAULT_PALETTE = ['#9f7355', '#335577', '#d9b46f', '#1f2d2b', '#efe1ce'];
 const FIXED_FRAME_COLORS = ['#ffffff', '#000000'];
 const AUTO_GENERATE_DELAY_MS = 500;
-const PREVIEW_DRAG_OFFSET_PER_PX = 0.4;
-const PREVIEW_DRAG_MIN_PX = 2;
 
 function App() {
   const [jobs, setJobs] = useState<BatchJob[]>([]);
@@ -451,17 +449,6 @@ function App() {
     updateSelectedPhotoTransform(createDefaultPhotoTransform());
   }
 
-  function handlePreviewDrag(deltaX: number, deltaY: number) {
-    if (!selectedJob) {
-      return;
-    }
-
-    updateSelectedPhotoTransform({
-      offsetX: selectedPhotoTransform.offsetX + deltaX * PREVIEW_DRAG_OFFSET_PER_PX,
-      offsetY: selectedPhotoTransform.offsetY + deltaY * PREVIEW_DRAG_OFFSET_PER_PX,
-    });
-  }
-
   function applyCurrentFrameSettingsToAll() {
     if (!selectedJob) {
       return;
@@ -700,7 +687,7 @@ function App() {
               </div>
             </div>
 
-            <PreviewCanvas onDrag={handlePreviewDrag}>
+            <PreviewCanvas>
               {previewUrl ? (
                 <img src={previewUrl} alt={selectedJob?.originalName ?? '照片预览'} />
               ) : (
@@ -885,43 +872,13 @@ function JobList({
 
 function PreviewCanvas({
   children,
-  onDrag,
 }: {
   children: React.ReactNode;
-  onDrag: (deltaX: number, deltaY: number) => void;
 }) {
-  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
-
   return (
     <div
       className="preview-canvas"
       data-testid="preview-canvas"
-      onPointerDown={(event) => {
-        if (event.button !== 0) {
-          return;
-        }
-
-        dragStartRef.current = { x: event.clientX, y: event.clientY };
-        event.currentTarget.setPointerCapture?.(event.pointerId);
-      }}
-      onPointerUp={(event) => {
-        const start = dragStartRef.current;
-        dragStartRef.current = null;
-        if (!start) {
-          return;
-        }
-
-        const deltaX = event.clientX - start.x;
-        const deltaY = event.clientY - start.y;
-        if (Math.hypot(deltaX, deltaY) < PREVIEW_DRAG_MIN_PX) {
-          return;
-        }
-
-        onDrag(deltaX, deltaY);
-      }}
-      onPointerCancel={() => {
-        dragStartRef.current = null;
-      }}
       role="presentation"
     >
       {children}

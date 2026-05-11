@@ -164,18 +164,12 @@ button:disabled {
 .preview-canvas {
   align-items: center;
   background: #ffffff;
-  cursor: grab;
   display: flex;
   flex: 1;
   justify-content: center;
   min-height: 0;
   padding: 28px;
-  touch-action: none;
   user-select: none;
-}
-
-.preview-canvas:active {
-  cursor: grabbing;
 }
 
 .preview-canvas img {
