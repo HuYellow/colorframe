@@ -24,6 +24,8 @@ describe('renderer photo composition', () => {
           textMode: 'filename',
           customText: '',
           textPosition: 'bottom',
+          chineseFont: 'zhuque-fangsong',
+          englishFont: 'isenheim',
           topBlockRatio: 7 / 9,
           exportFormat: 'png',
           exportQuality: 0.92,
@@ -57,6 +59,8 @@ describe('renderer photo composition', () => {
           textMode: 'filename',
           customText: '',
           textPosition: 'bottom',
+          chineseFont: 'zhuque-fangsong',
+          englishFont: 'isenheim',
           topBlockRatio: 1,
           exportFormat: 'png',
           exportQuality: 0.92,
@@ -101,7 +105,7 @@ describe('renderer photo composition', () => {
     expect(layout.lines[2].y).toBeGreaterThan(layout.lines[0].y);
   });
 
-  it('uses Isenheim with Songti fallbacks as the default caption font', () => {
+  it('uses Zhuque for Chinese and Isenheim for English in the default caption font', () => {
     const context = {
       font: '',
       measureText: (text: string) => ({ width: text.length * 10 }),
@@ -113,10 +117,33 @@ describe('renderer photo composition', () => {
       maxWidth: 320,
       maxHeight: 120,
       initialFontSize: 32,
+      chineseFont: 'zhuque-fangsong',
+      englishFont: 'isenheim',
     });
 
     expect(context.font).toBe(
-      '400 32px "Isenheim", "SimSun", "宋体", "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC", serif',
+      '400 32px "Isenheim", "Zhuque Fangsong", "SimSun", "宋体", "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC", serif',
+    );
+  });
+
+  it('can switch Chinese and English caption font choices independently', () => {
+    const context = {
+      font: '',
+      measureText: (text: string) => ({ width: text.length * 10 }),
+    } as CanvasRenderingContext2D;
+
+    layoutTextLines(context, ['森林公园 new year'], {
+      centerX: 200,
+      centerY: 150,
+      maxWidth: 320,
+      maxHeight: 120,
+      initialFontSize: 32,
+      chineseFont: 'system-songti',
+      englishFont: 'system-serif',
+    });
+
+    expect(context.font).toBe(
+      '400 32px Georgia, "Times New Roman", "SimSun", "宋体", "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC", serif',
     );
   });
 
@@ -131,7 +158,7 @@ describe('renderer photo composition', () => {
 
     await ensureCaptionFontReady(fonts);
 
-    expect(loadCalls).toEqual(['400 32px "Isenheim"']);
+    expect(loadCalls).toEqual(['400 32px "Isenheim"', '400 32px "Zhuque Fangsong"']);
   });
 
   it('lays out smart analysis as centered metadata copy without a leading color chip', () => {
@@ -162,6 +189,8 @@ describe('renderer photo composition', () => {
           textMode: 'smart',
           customText: '',
           textPosition: 'bottom',
+          chineseFont: 'zhuque-fangsong',
+          englishFont: 'isenheim',
           topBlockRatio: 1,
           exportFormat: 'png',
           exportQuality: 0.92,

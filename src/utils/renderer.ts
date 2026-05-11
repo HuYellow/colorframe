@@ -1,12 +1,11 @@
 import type { ColorTheme, FrameTemplate, PhotoTransform, RenderResult, SmartAnalysis } from '../types';
+import { getCaptionFontFamily } from './fontOptions';
 import { normalizePhotoTransform } from './photoTransform';
 import { getMimeType, getTemplateText } from './template';
 
 const PREVIEW_MAX_SIDE = 1600;
 const EXPORT_MAX_SIDE = 3000;
 const MIN_TEXT_FONT_SIZE = 12;
-const CAPTION_FONT_FAMILY =
-  '"Isenheim", "SimSun", "宋体", "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC", serif';
 
 export async function renderFramedImage({
   file,
@@ -84,7 +83,7 @@ export async function ensureCaptionFontReady(fonts: FontLoader | undefined = doc
     return;
   }
 
-  await fonts.load('400 32px "Isenheim"');
+  await Promise.all([fonts.load('400 32px "Isenheim"'), fonts.load('400 32px "Zhuque Fangsong"')]);
 }
 
 export type CanvasLayout = {
@@ -280,7 +279,7 @@ function drawText(
   }
 
   if (renderMode.kind === 'smartAnalysis') {
-    drawSmartAnalysis(context, theme, layout, renderMode.analysis);
+    drawSmartAnalysis(context, theme, layout, template, renderMode.analysis);
     return;
   }
 
@@ -302,13 +301,15 @@ function drawText(
     maxWidth,
     maxHeight,
     initialFontSize,
+    chineseFont: template.chineseFont,
+    englishFont: template.englishFont,
   });
 
   context.save();
   context.fillStyle = theme.textColor;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.font = getTextFont(textLayout.fontSize);
+  context.font = getTextFont(textLayout.fontSize, template);
   textLayout.lines.forEach((line) => context.fillText(line.text, line.x, line.y, maxWidth));
   context.restore();
 }
@@ -348,6 +349,7 @@ function drawSmartAnalysis(
   context: CanvasRenderingContext2D,
   theme: ColorTheme,
   layout: CanvasLayout,
+  template: FrameTemplate,
   analysis: SmartAnalysis,
 ) {
   const smartLayout = computeSmartAnalysisLayout({
@@ -366,17 +368,17 @@ function drawSmartAnalysis(
   context.textAlign = 'left';
   context.textBaseline = 'alphabetic';
   context.fillStyle = theme.textColor;
-  context.font = getTextFont(titleSize);
+  context.font = getTextFont(titleSize, template);
   context.fillText(analysis.title, smartLayout.textX, smartLayout.titleY, smartLayout.maxTextWidth);
 
   if (analysis.subtitle && smartLayout.subtitleY !== undefined) {
     context.globalAlpha = 0.84;
-    context.font = getTextFont(subtitleSize);
+    context.font = getTextFont(subtitleSize, template);
     context.fillText(analysis.subtitle, smartLayout.textX, smartLayout.subtitleY, smartLayout.maxTextWidth);
   }
 
   context.globalAlpha = 0.46;
-  context.font = getTextFont(detailSize);
+  context.font = getTextFont(detailSize, template);
   analysis.detailLines.forEach((line, index) => {
     context.fillText(line, smartLayout.textX, smartLayout.detailsY + index * detailLineHeight, smartLayout.maxTextWidth);
   });
@@ -406,21 +408,28 @@ export function layoutTextLines(
     maxWidth,
     maxHeight,
     initialFontSize,
+    chineseFont,
+    englishFont,
   }: {
     centerX: number;
     centerY: number;
     maxWidth: number;
     maxHeight: number;
     initialFontSize: number;
+    chineseFont?: FrameTemplate['chineseFont'];
+    englishFont?: FrameTemplate['englishFont'];
   },
 ) {
   let fontSize = initialFontSize;
 
-  while (fontSize > MIN_TEXT_FONT_SIZE && !doTextLinesFit(context, lines, fontSize, maxWidth, maxHeight)) {
+  while (
+    fontSize > MIN_TEXT_FONT_SIZE &&
+    !doTextLinesFit(context, lines, fontSize, maxWidth, maxHeight, { chineseFont, englishFont })
+  ) {
     fontSize -= 1;
   }
 
-  context.font = getTextFont(fontSize);
+  context.font = getTextFont(fontSize, { chineseFont, englishFont });
   const lineHeight = Math.round(fontSize * 1.34);
   const totalHeight = lineHeight * lines.length;
   const startY = centerY - totalHeight / 2 + lineHeight / 2;
@@ -441,16 +450,20 @@ function doTextLinesFit(
   fontSize: number,
   maxWidth: number,
   maxHeight: number,
+  fontSettings: Partial<Pick<FrameTemplate, 'chineseFont' | 'englishFont'>>,
 ) {
-  context.font = getTextFont(fontSize);
+  context.font = getTextFont(fontSize, fontSettings);
   const lineHeight = Math.round(fontSize * 1.34);
   const totalHeight = lineHeight * lines.length;
 
   return totalHeight <= maxHeight && lines.every((line) => line === '' || context.measureText(line).width <= maxWidth);
 }
 
-function getTextFont(fontSize: number): string {
-  return `400 ${fontSize}px ${CAPTION_FONT_FAMILY}`;
+function getTextFont(
+  fontSize: number,
+  fontSettings: Partial<Pick<FrameTemplate, 'chineseFont' | 'englishFont'>>,
+): string {
+  return `400 ${fontSize}px ${getCaptionFontFamily(fontSettings)}`;
 }
 
 function roundedRectPath(

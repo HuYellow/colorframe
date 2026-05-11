@@ -7,9 +7,17 @@
   src: url('./assets/fonts/Isenheim_Regulier.otf') format('opentype');
 }
 
+@font-face {
+  font-family: 'Zhuque Fangsong';
+  font-style: normal;
+  font-weight: 400;
+  src: url('./assets/fonts/ZhuqueFangsong-Regular.ttf') format('truetype');
+}
+
 :root {
   font-family:
-    'Isenheim', 'SimSun', '宋体', 'Songti SC', 'STSong', 'Source Han Serif SC', 'Noto Serif CJK SC', serif;
+    'Isenheim', 'Zhuque Fangsong', 'SimSun', '宋体', 'Songti SC', 'STSong', 'Source Han Serif SC',
+    'Noto Serif CJK SC', serif;
   color: #211d18;
   background: #fbfaf7;
   font-synthesis: none;
@@ -20,8 +28,8 @@
   --panel: #fffffc;
   --line: #e8e2d8;
   --active-color: #9f7355;
-  --caption-font: 'Isenheim', 'SimSun', '宋体', 'Songti SC', 'STSong', 'Source Han Serif SC', 'Noto Serif CJK SC',
-    serif;
+  --caption-font: 'Isenheim', 'Zhuque Fangsong', 'SimSun', '宋体', 'Songti SC', 'STSong', 'Source Han Serif SC',
+    'Noto Serif CJK SC', serif;
 }
 
 * {
@@ -425,6 +433,12 @@ button:disabled {
   font-family: ui-sans-serif, system-ui, sans-serif;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.font-controls {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .photo-text-field {

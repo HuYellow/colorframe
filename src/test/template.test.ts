@@ -9,6 +9,8 @@ describe('template utilities', () => {
     expect(template.frameLayout).toBe('stacked');
     expect(template.frameStyle).toBe('solid');
     expect(template.topBlockRatio).toBe(7 / 9);
+    expect(template.chineseFont).toBe('zhuque-fangsong');
+    expect(template.englishFont).toBe('isenheim');
     expect(getTemplateText(template, 'Summer Trip.JPG')).toBe('Summer Trip');
   });
 

@@ -28,6 +28,7 @@ import { renderFramedImage } from './utils/renderer';
 import { createSmartCaption } from './utils/smartCaption';
 import { createDefaultTemplate } from './utils/template';
 import { createThemeWithFrameColor } from './utils/color';
+import { CHINESE_FONT_OPTIONS, ENGLISH_FONT_OPTIONS, getCaptionFontFamily } from './utils/fontOptions';
 import {
   PHOTO_OFFSET_MAX,
   PHOTO_OFFSET_MIN,
@@ -873,9 +874,17 @@ function TemplateControls({
   const palette = withFixedFrameColors(selectedJob?.palette?.length ? selectedJob.palette : DEFAULT_PALETTE);
   const selectedColor = selectedJob?.selectedFrameColor ?? selectedJob?.themeColor ?? palette[0];
   const isStackedLayout = frameTemplate.frameLayout === 'stacked';
+  const captionFont = getCaptionFontFamily({
+    chineseFont: template.chineseFont,
+    englishFont: template.englishFont,
+  });
 
   return (
-    <section className="controls-card">
+    <section
+      className="controls-card"
+      data-testid="template-controls"
+      style={{ '--caption-font': captionFont } as React.CSSProperties}
+    >
       <div className="section-title">
         <SlidersHorizontal size={18} />
         <h2>默认流程</h2>
@@ -1068,6 +1077,44 @@ function TemplateControls({
           />
         </label>
       ) : null}
+
+      <div className="font-controls">
+        <label className="field">
+          <span>中文字体</span>
+          <select
+            aria-label="中文字体"
+            data-testid="chinese-font-select"
+            value={template.chineseFont}
+            onChange={(event) =>
+              onChange({ ...template, chineseFont: event.target.value as FrameTemplate['chineseFont'] })
+            }
+          >
+            {CHINESE_FONT_OPTIONS.map((font) => (
+              <option key={font.value} value={font.value}>
+                {font.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>英文字体</span>
+          <select
+            aria-label="英文字体"
+            data-testid="english-font-select"
+            value={template.englishFont}
+            onChange={(event) =>
+              onChange({ ...template, englishFont: event.target.value as FrameTemplate['englishFont'] })
+            }
+          >
+            {ENGLISH_FONT_OPTIONS.map((font) => (
+              <option key={font.value} value={font.value}>
+                {font.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <label className="field photo-text-field">
         <span>当前照片文字</span>

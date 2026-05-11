@@ -10,6 +10,8 @@ export function createDefaultTemplate(): FrameTemplate {
     textMode: 'filename',
     customText: '',
     textPosition: 'bottom',
+    chineseFont: 'zhuque-fangsong',
+    englishFont: 'isenheim',
     exportFormat: 'png',
     exportQuality: 0.92,
   };

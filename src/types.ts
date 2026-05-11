@@ -6,6 +6,10 @@ export type TextMode = 'filename' | 'custom' | 'smart' | 'none';
 
 export type TextPosition = 'bottom' | 'top';
 
+export type CaptionChineseFont = 'zhuque-fangsong' | 'system-songti';
+
+export type CaptionEnglishFont = 'isenheim' | 'system-serif';
+
 export type FrameStyle = 'solid' | 'blur';
 
 export type FrameLayout = 'stacked' | 'surround';
@@ -19,6 +23,8 @@ export type FrameTemplate = {
   textMode: TextMode;
   customText: string;
   textPosition: TextPosition;
+  chineseFont: CaptionChineseFont;
+  englishFont: CaptionEnglishFont;
   exportFormat: ExportFormat;
   exportQuality: number;
 };

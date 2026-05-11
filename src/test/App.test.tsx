@@ -196,6 +196,43 @@ describe('ColorFrame app', () => {
     expect(screen.getByLabelText(/当前照片文字/i)).toHaveValue('Line one\nLine two');
   });
 
+  it('lets Chinese and English caption fonts be selected independently', async () => {
+    vi.useFakeTimers();
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId('photo-upload'), {
+      target: { files: [new File(['image-a'], 'a.png', { type: 'image/png' })] },
+    });
+
+    expect(screen.getByLabelText(/中文字体/i)).toHaveValue('zhuque-fangsong');
+    expect(screen.getByLabelText(/英文字体/i)).toHaveValue('isenheim');
+    expect(screen.getByTestId('template-controls')).toHaveAttribute(
+      'style',
+      expect.stringContaining('"Isenheim", "Zhuque Fangsong"'),
+    );
+
+    fireEvent.change(screen.getByLabelText(/中文字体/i), { target: { value: 'system-songti' } });
+    fireEvent.change(screen.getByLabelText(/英文字体/i), { target: { value: 'system-serif' } });
+    expect(screen.getByTestId('template-controls')).toHaveAttribute(
+      'style',
+      expect.stringContaining('Georgia, "Times New Roman", "SimSun"'),
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    expect(mocks.renderFramedImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        template: expect.objectContaining({
+          chineseFont: 'system-songti',
+          englishFont: 'system-serif',
+        }),
+      }),
+    );
+  });
+
   it('offers smart analysis mode and renders with parsed image information', async () => {
     vi.useFakeTimers();
     mocks.createSmartCaption.mockResolvedValueOnce({
