@@ -13,21 +13,33 @@ const CHINESE_FONT_STACKS: Record<CaptionChineseFont, string[]> = {
     '"Source Han Serif SC"',
     '"Noto Serif CJK SC"',
   ],
+  'state-banquet-songti': [
+    '"SimSun"',
+    '"宋体"',
+    '"Songti SC"',
+    '"STSong"',
+    '"Source Han Serif SC"',
+    '"Noto Serif CJK SC"',
+    '"Zhuque Fangsong"',
+  ],
   'system-songti': ['"SimSun"', '"宋体"', '"Songti SC"', '"STSong"', '"Source Han Serif SC"', '"Noto Serif CJK SC"'],
 };
 
 const ENGLISH_FONT_STACKS: Record<CaptionEnglishFont, string[]> = {
   isenheim: ['"Isenheim"'],
+  'state-banquet-serif': ['"Times New Roman"', '"Nimbus Roman"', '"Liberation Serif"', 'Georgia'],
   'system-serif': ['Georgia', '"Times New Roman"'],
 };
 
 export const CHINESE_FONT_OPTIONS: { value: CaptionChineseFont; label: string }[] = [
   { value: 'zhuque-fangsong', label: '朱雀仿宋' },
+  { value: 'state-banquet-songti', label: '宋体' },
   { value: 'system-songti', label: '系统宋体' },
 ];
 
 export const ENGLISH_FONT_OPTIONS: { value: CaptionEnglishFont; label: string }[] = [
   { value: 'isenheim', label: 'Isenheim' },
+  { value: 'state-banquet-serif', label: 'Times New Roman' },
   { value: 'system-serif', label: 'System Serif' },
 ];
 

@@ -6,9 +6,9 @@ export type TextMode = 'filename' | 'custom' | 'smart' | 'none';
 
 export type TextPosition = 'bottom' | 'top';
 
-export type CaptionChineseFont = 'zhuque-fangsong' | 'system-songti';
+export type CaptionChineseFont = 'zhuque-fangsong' | 'state-banquet-songti' | 'system-songti';
 
-export type CaptionEnglishFont = 'isenheim' | 'system-serif';
+export type CaptionEnglishFont = 'isenheim' | 'state-banquet-serif' | 'system-serif';
 
 export type FrameStyle = 'solid' | 'blur';
 
