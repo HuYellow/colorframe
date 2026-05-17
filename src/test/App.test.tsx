@@ -571,6 +571,27 @@ describe('ColorFrame app', () => {
     );
   });
 
+  it('regenerates the selected photo immediately while the color block height slider moves', async () => {
+    vi.useFakeTimers();
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId('photo-upload'), {
+      target: { files: [new File(['image-a'], 'a.png', { type: 'image/png' })] },
+    });
+    fireEvent.change(screen.getByTestId('top-block-ratio-input'), { target: { value: '0.95' } });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.renderFramedImage).toHaveBeenCalled();
+    expect(mocks.renderFramedImage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        template: expect.objectContaining({ topBlockRatio: 0.95 }),
+      }),
+    );
+  });
+
   it('regenerates the selected photo immediately while composition controls move', async () => {
     vi.useFakeTimers();
     render(<App />);

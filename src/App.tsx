@@ -383,12 +383,15 @@ function App() {
 
     const jobId = selectedJob.id;
     const currentFrameSettings = getJobFrameSettings(selectedJob, templateRef.current);
-    revokePreviewUrl(selectedJob.previewUrl);
+    const renderImmediately = 'topBlockRatio' in nextSettings;
+    if (!renderImmediately) {
+      revokePreviewUrl(selectedJob.previewUrl);
+    }
     setJobs((current) =>
       current.map((job) =>
         job.id === jobId
           ? {
-              ...markJobForRegeneration(job),
+              ...markJobForRegeneration(job, { keepRenderedOutput: renderImmediately }),
               frameSettings: {
                 ...currentFrameSettings,
                 ...nextSettings,
@@ -397,7 +400,11 @@ function App() {
           : job,
       ),
     );
-    scheduleAutoGenerate(jobId);
+    scheduleAutoGenerate(
+      jobId,
+      undefined,
+      renderImmediately ? { delayMs: IMMEDIATE_AUTO_GENERATE_DELAY_MS } : undefined,
+    );
   }
 
   function updateSelectedPhotoTransform(nextTransform: Partial<PhotoTransform>) {
