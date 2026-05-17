@@ -2,7 +2,7 @@ export type BatchJobStatus = 'pending' | 'processing' | 'done' | 'failed' | 'can
 
 export type ExportFormat = 'png' | 'jpeg' | 'webp';
 
-export type TextMode = 'filename' | 'custom' | 'smart' | 'none';
+export type TextMode = 'custom' | 'smart' | 'none';
 
 export type TextPosition = 'bottom' | 'top';
 
@@ -25,6 +25,8 @@ export type FrameTemplate = {
   textPosition: TextPosition;
   chineseFont: CaptionChineseFont;
   englishFont: CaptionEnglishFont;
+  chineseFontSize: number;
+  englishFontSize: number;
   exportFormat: ExportFormat;
   exportQuality: number;
 };

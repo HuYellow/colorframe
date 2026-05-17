@@ -1,11 +1,12 @@
 import type { ColorTheme, FrameTemplate, PhotoTransform, RenderResult, SmartAnalysis } from '../types';
-import { getCaptionFontFamily } from './fontOptions';
+import { getCaptionFontFamily, getChineseCaptionFontFamily, getEnglishCaptionFontFamily } from './fontOptions';
 import { normalizePhotoTransform } from './photoTransform';
 import { getMimeType, getTemplateText } from './template';
 
 const PREVIEW_MAX_SIDE = 1600;
 const EXPORT_MAX_SIDE = 3000;
 const MIN_TEXT_FONT_SIZE = 12;
+const DEFAULT_TEXT_FONT_SIZE = 14;
 
 export async function renderFramedImage({
   file,
@@ -291,16 +292,13 @@ function drawText(
   const textPadding = template.frameLayout === 'stacked' ? Math.max(20, layout.textAreaWidth * 0.12) : frame * 0.2;
   const maxWidth = Math.max(1, layout.textAreaWidth - textPadding * 2);
   const maxHeight = Math.max(1, layout.textAreaHeight * 0.72);
-  const initialFontSize =
-    template.frameLayout === 'stacked'
-      ? Math.max(18, Math.min(72, Math.round(layout.textAreaHeight * 0.16)))
-      : Math.max(18, Math.min(54, Math.round(frame * 0.36)));
   const textLayout = layoutTextLines(context, lines, {
     centerX: layout.textAreaX + layout.textAreaWidth / 2,
     centerY: layout.textAreaY + layout.textAreaHeight / 2,
     maxWidth,
     maxHeight,
-    initialFontSize,
+    initialChineseFontSize: template.chineseFontSize,
+    initialEnglishFontSize: template.englishFontSize,
     chineseFont: template.chineseFont,
     englishFont: template.englishFont,
   });
@@ -309,8 +307,12 @@ function drawText(
   context.fillStyle = theme.textColor;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.font = getTextFont(textLayout.fontSize, template);
-  textLayout.lines.forEach((line) => context.fillText(line.text, line.x, line.y, maxWidth));
+  textLayout.lines.forEach((line) => {
+    line.segments.forEach((segment) => {
+      context.font = getSegmentFont(segment.kind, textLayout, template);
+      context.fillText(segment.text, segment.x, line.y);
+    });
+  });
   context.restore();
 }
 
@@ -408,6 +410,8 @@ export function layoutTextLines(
     maxWidth,
     maxHeight,
     initialFontSize,
+    initialChineseFontSize,
+    initialEnglishFontSize,
     chineseFont,
     englishFont,
   }: {
@@ -415,48 +419,61 @@ export function layoutTextLines(
     centerY: number;
     maxWidth: number;
     maxHeight: number;
-    initialFontSize: number;
+    initialFontSize?: number;
+    initialChineseFontSize?: number;
+    initialEnglishFontSize?: number;
     chineseFont?: FrameTemplate['chineseFont'];
     englishFont?: FrameTemplate['englishFont'];
   },
 ) {
-  let fontSize = initialFontSize;
+  let chineseFontSize = initialChineseFontSize ?? initialFontSize ?? DEFAULT_TEXT_FONT_SIZE;
+  let englishFontSize = initialEnglishFontSize ?? initialFontSize ?? DEFAULT_TEXT_FONT_SIZE;
 
   while (
-    fontSize > MIN_TEXT_FONT_SIZE &&
-    !doTextLinesFit(context, lines, fontSize, maxWidth, maxHeight, { chineseFont, englishFont })
+    Math.max(chineseFontSize, englishFontSize) > MIN_TEXT_FONT_SIZE &&
+    !doTextLinesFit(context, lines, maxWidth, maxHeight, { chineseFont, englishFont, chineseFontSize, englishFontSize })
   ) {
-    fontSize -= 1;
+    if (chineseFontSize >= englishFontSize && chineseFontSize > MIN_TEXT_FONT_SIZE) {
+      chineseFontSize -= 1;
+    } else if (englishFontSize > MIN_TEXT_FONT_SIZE) {
+      englishFontSize -= 1;
+    } else if (chineseFontSize > MIN_TEXT_FONT_SIZE) {
+      chineseFontSize -= 1;
+    }
   }
 
-  context.font = getTextFont(fontSize, { chineseFont, englishFont });
-  const lineHeight = Math.round(fontSize * 1.34);
+  const lineHeight = Math.round(Math.max(chineseFontSize, englishFontSize) * 1.34);
   const totalHeight = lineHeight * lines.length;
   const startY = centerY - totalHeight / 2 + lineHeight / 2;
+  const laidOutLines = lines.map((line, index) =>
+    layoutTextLine(context, line, centerX, startY + index * lineHeight, {
+      chineseFont,
+      englishFont,
+      chineseFontSize,
+      englishFontSize,
+    }),
+  );
+  context.font = getTextFont(Math.max(chineseFontSize, englishFontSize), { chineseFont, englishFont });
 
   return {
-    fontSize,
-    lines: lines.map((line, index) => ({
-      text: line,
-      x: centerX,
-      y: startY + index * lineHeight,
-    })),
+    fontSize: Math.max(chineseFontSize, englishFontSize),
+    chineseFontSize,
+    englishFontSize,
+    lines: laidOutLines,
   };
 }
 
 function doTextLinesFit(
   context: Pick<CanvasRenderingContext2D, 'font' | 'measureText'>,
   lines: string[],
-  fontSize: number,
   maxWidth: number,
   maxHeight: number,
-  fontSettings: Partial<Pick<FrameTemplate, 'chineseFont' | 'englishFont'>>,
+  fontSettings: TextFontSettings,
 ) {
-  context.font = getTextFont(fontSize, fontSettings);
-  const lineHeight = Math.round(fontSize * 1.34);
+  const lineHeight = Math.round(Math.max(fontSettings.chineseFontSize, fontSettings.englishFontSize) * 1.34);
   const totalHeight = lineHeight * lines.length;
 
-  return totalHeight <= maxHeight && lines.every((line) => line === '' || context.measureText(line).width <= maxWidth);
+  return totalHeight <= maxHeight && lines.every((line) => line === '' || measureTextLine(context, line, fontSettings) <= maxWidth);
 }
 
 function getTextFont(
@@ -464,6 +481,92 @@ function getTextFont(
   fontSettings: Partial<Pick<FrameTemplate, 'chineseFont' | 'englishFont'>>,
 ): string {
   return `400 ${fontSize}px ${getCaptionFontFamily(fontSettings)}`;
+}
+
+type TextSegmentKind = 'chinese' | 'english';
+
+type TextSegment = {
+  text: string;
+  kind: TextSegmentKind;
+  x: number;
+};
+
+type TextFontSettings = Partial<Pick<FrameTemplate, 'chineseFont' | 'englishFont'>> & {
+  chineseFontSize: number;
+  englishFontSize: number;
+};
+
+function layoutTextLine(
+  context: Pick<CanvasRenderingContext2D, 'font' | 'measureText'>,
+  text: string,
+  centerX: number,
+  y: number,
+  fontSettings: TextFontSettings,
+) {
+  const totalWidth = measureTextLine(context, text, fontSettings);
+  let segmentX = centerX - totalWidth / 2;
+  const segments = segmentTextByScript(text).map((segment) => {
+    context.font = getSegmentFont(segment.kind, fontSettings, fontSettings);
+    const width = context.measureText(segment.text).width;
+    const laidOutSegment = {
+      ...segment,
+      x: segmentX + width / 2,
+    };
+    segmentX += width;
+    return laidOutSegment;
+  });
+
+  return { text, x: centerX, y, segments };
+}
+
+function measureTextLine(
+  context: Pick<CanvasRenderingContext2D, 'font' | 'measureText'>,
+  text: string,
+  fontSettings: TextFontSettings,
+): number {
+  return segmentTextByScript(text).reduce((width, segment) => {
+    context.font = getSegmentFont(segment.kind, fontSettings, fontSettings);
+    return width + context.measureText(segment.text).width;
+  }, 0);
+}
+
+function segmentTextByScript(text: string): Array<Omit<TextSegment, 'x'>> {
+  const segments: Array<Omit<TextSegment, 'x'>> = [];
+  let currentText = '';
+  let currentKind: TextSegmentKind | undefined;
+
+  Array.from(text).forEach((character) => {
+    const kind: TextSegmentKind = isChineseCharacter(character) ? 'chinese' : 'english';
+    if (currentKind && currentKind !== kind) {
+      segments.push({ text: currentText, kind: currentKind });
+      currentText = '';
+    }
+
+    currentKind = kind;
+    currentText += character;
+  });
+
+  if (currentText && currentKind) {
+    segments.push({ text: currentText, kind: currentKind });
+  }
+
+  return segments;
+}
+
+function isChineseCharacter(character: string): boolean {
+  return /\p{Script=Han}/u.test(character);
+}
+
+function getSegmentFont(
+  kind: TextSegmentKind,
+  fontSizes: Pick<TextFontSettings, 'chineseFontSize' | 'englishFontSize'>,
+  fontSettings: Partial<Pick<FrameTemplate, 'chineseFont' | 'englishFont'>>,
+): string {
+  if (kind === 'chinese') {
+    return `400 ${fontSizes.chineseFontSize}px ${getChineseCaptionFontFamily(fontSettings.chineseFont)}`;
+  }
+
+  return `400 ${fontSizes.englishFontSize}px ${getEnglishCaptionFontFamily(fontSettings.englishFont)}`;
 }
 
 function roundedRectPath(

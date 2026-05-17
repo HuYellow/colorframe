@@ -42,6 +42,8 @@ const DEFAULT_PALETTE = ['#9f7355', '#335577', '#d9b46f', '#1f2d2b', '#efe1ce'];
 const FIXED_FRAME_COLORS = ['#ffffff', '#000000'];
 const AUTO_GENERATE_DELAY_MS = 500;
 const IMMEDIATE_AUTO_GENERATE_DELAY_MS = 0;
+const CAPTION_FONT_SIZE_MIN = 8;
+const CAPTION_FONT_SIZE_MAX = 72;
 
 type AutoGenerateRequest = {
   jobId: string;
@@ -1112,12 +1114,12 @@ function TemplateControls({
 
       <div className="segmented" aria-label="文字模式">
         {[
-          ['filename', '文件名'],
           ['custom', '统一文字'],
           ['smart', '智能解析'],
           ['none', '无文字'],
         ].map(([mode, label]) => (
           <button
+            aria-pressed={template.textMode === mode}
             className={template.textMode === mode ? 'selected' : ''}
             key={mode}
             onClick={() => onChange({ ...template, textMode: mode as FrameTemplate['textMode'] })}
@@ -1159,6 +1161,21 @@ function TemplateControls({
         </label>
 
         <label className="field">
+          <span>中文字号</span>
+          <input
+            aria-label="中文字号"
+            data-testid="chinese-font-size-input"
+            max={CAPTION_FONT_SIZE_MAX}
+            min={CAPTION_FONT_SIZE_MIN}
+            type="number"
+            value={template.chineseFontSize}
+            onChange={(event) =>
+              onChange({ ...template, chineseFontSize: normalizeCaptionFontSize(event.target.value) })
+            }
+          />
+        </label>
+
+        <label className="field">
           <span>英文字体</span>
           <select
             aria-label="英文字体"
@@ -1174,6 +1191,21 @@ function TemplateControls({
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="field">
+          <span>英文字号</span>
+          <input
+            aria-label="英文字号"
+            data-testid="english-font-size-input"
+            max={CAPTION_FONT_SIZE_MAX}
+            min={CAPTION_FONT_SIZE_MIN}
+            type="number"
+            value={template.englishFontSize}
+            onChange={(event) =>
+              onChange({ ...template, englishFontSize: normalizeCaptionFontSize(event.target.value) })
+            }
+          />
         </label>
       </div>
 
@@ -1234,6 +1266,15 @@ function TemplateControls({
       </label>
     </section>
   );
+}
+
+function normalizeCaptionFontSize(value: string): number {
+  const fontSize = Number(value);
+  if (!Number.isFinite(fontSize)) {
+    return 14;
+  }
+
+  return Math.min(CAPTION_FONT_SIZE_MAX, Math.max(CAPTION_FONT_SIZE_MIN, Math.round(fontSize)));
 }
 
 function withFixedFrameColors(palette: string[]) {

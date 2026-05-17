@@ -21,11 +21,13 @@ describe('renderer photo composition', () => {
           frameRatio: 0.07,
           cornerRadiusRatio: 0.025,
           frameStyle: 'solid',
-          textMode: 'filename',
-          customText: '',
+          textMode: 'custom',
+          customText: '请输入文本',
           textPosition: 'bottom',
           chineseFont: 'zhuque-fangsong',
           englishFont: 'isenheim',
+          chineseFontSize: 14,
+          englishFontSize: 14,
           topBlockRatio: 7 / 9,
           exportFormat: 'png',
           exportQuality: 0.92,
@@ -56,11 +58,13 @@ describe('renderer photo composition', () => {
           frameRatio: 0.07,
           cornerRadiusRatio: 0.025,
           frameStyle: 'blur',
-          textMode: 'filename',
-          customText: '',
+          textMode: 'custom',
+          customText: '请输入文本',
           textPosition: 'bottom',
           chineseFont: 'zhuque-fangsong',
           englishFont: 'isenheim',
+          chineseFontSize: 14,
+          englishFontSize: 14,
           topBlockRatio: 1,
           exportFormat: 'png',
           exportQuality: 0.92,
@@ -103,6 +107,36 @@ describe('renderer photo composition', () => {
     expect(layout.lines).toHaveLength(3);
     expect(layout.lines[0]).toMatchObject({ text: 'Stanley, Hong Kong', x: 200 });
     expect(layout.lines[2].y).toBeGreaterThan(layout.lines[0].y);
+  });
+
+  it('keeps separate Chinese and English font sizes while fitting manual text', () => {
+    const measuredFonts: string[] = [];
+    const context = {
+      font: '',
+      measureText(text: string) {
+        measuredFonts.push(this.font);
+        const fontSize = Number(this.font.match(/(\d+)px/)?.[1] ?? 0);
+        return { width: text.length * fontSize };
+      },
+    } as CanvasRenderingContext2D;
+
+    const layout = layoutTextLines(context, ['请输入文本 ColorFrame'], {
+      centerX: 200,
+      centerY: 150,
+      maxWidth: 600,
+      maxHeight: 120,
+      initialChineseFontSize: 18,
+      initialEnglishFontSize: 24,
+      chineseFont: 'zhuque-fangsong',
+      englishFont: 'isenheim',
+    });
+
+    expect(layout.chineseFontSize).toBe(18);
+    expect(layout.englishFontSize).toBe(24);
+    expect(measuredFonts).toContain(
+      '400 18px "Zhuque Fangsong", "SimSun", "宋体", "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC", serif',
+    );
+    expect(measuredFonts).toContain('400 24px "Isenheim", serif');
   });
 
   it('uses Zhuque for Chinese and Isenheim for English in the default caption font', () => {
@@ -191,6 +225,8 @@ describe('renderer photo composition', () => {
           textPosition: 'bottom',
           chineseFont: 'zhuque-fangsong',
           englishFont: 'isenheim',
+          chineseFontSize: 14,
+          englishFontSize: 14,
           topBlockRatio: 1,
           exportFormat: 'png',
           exportQuality: 0.92,

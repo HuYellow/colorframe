@@ -52,3 +52,11 @@ export function getCaptionFontFamily({
 } = {}): string {
   return [...ENGLISH_FONT_STACKS[englishFont], ...CHINESE_FONT_STACKS[chineseFont], 'serif'].join(', ');
 }
+
+export function getChineseCaptionFontFamily(chineseFont: CaptionChineseFont = DEFAULT_CHINESE_FONT): string {
+  return [...CHINESE_FONT_STACKS[chineseFont], 'serif'].join(', ');
+}
+
+export function getEnglishCaptionFontFamily(englishFont: CaptionEnglishFont = DEFAULT_ENGLISH_FONT): string {
+  return [...ENGLISH_FONT_STACKS[englishFont], 'serif'].join(', ');
+}

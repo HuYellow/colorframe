@@ -74,6 +74,22 @@ test('loads the ColorFrame workspace', async ({ page }) => {
   await expect(page.getByTestId('process-batch')).toBeVisible();
 });
 
+test('defaults to unified text with separate caption size controls', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.getByRole('button', { name: '文件名' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '统一文字' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('统一文字')).toHaveValue('请输入文本');
+  await expect(page.getByLabel('中文字号')).toHaveValue('14');
+  await expect(page.getByLabel('英文字号')).toHaveValue('14');
+
+  await page.getByLabel('中文字号').fill('18');
+  await page.getByLabel('英文字号').fill('22');
+
+  await expect(page.getByLabel('中文字号')).toHaveValue('18');
+  await expect(page.getByLabel('英文字号')).toHaveValue('22');
+});
+
 test('auto processes multiple uploaded images', async ({ page }, testInfo) => {
   await page.goto('/');
 

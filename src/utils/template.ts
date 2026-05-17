@@ -7,11 +7,13 @@ export function createDefaultTemplate(): FrameTemplate {
     cornerRadiusRatio: 0.025,
     frameStyle: 'solid',
     topBlockRatio: 7 / 9,
-    textMode: 'filename',
-    customText: '',
+    textMode: 'custom',
+    customText: '请输入文本',
     textPosition: 'bottom',
     chineseFont: 'zhuque-fangsong',
     englishFont: 'isenheim',
+    chineseFontSize: 14,
+    englishFontSize: 14,
     exportFormat: 'png',
     exportQuality: 0.92,
   };
@@ -44,7 +46,7 @@ export function getTemplateText(
     return suggestedText?.trim() || stripExtension(fileName);
   }
 
-  return stripExtension(fileName);
+  return '';
 }
 
 export function getMimeType(format: FrameTemplate['exportFormat']): string {

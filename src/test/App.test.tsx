@@ -115,7 +115,10 @@ describe('ColorFrame app', () => {
           frameLayout: 'stacked',
           frameStyle: 'solid',
           topBlockRatio: 7 / 9,
-          textMode: 'filename',
+          textMode: 'custom',
+          customText: '请输入文本',
+          chineseFontSize: 14,
+          englishFontSize: 14,
         }),
       }),
     );
@@ -127,7 +130,10 @@ describe('ColorFrame app', () => {
           frameLayout: 'stacked',
           frameStyle: 'solid',
           topBlockRatio: 7 / 9,
-          textMode: 'filename',
+          textMode: 'custom',
+          customText: '请输入文本',
+          chineseFontSize: 14,
+          englishFontSize: 14,
         }),
       }),
     );
@@ -196,6 +202,14 @@ describe('ColorFrame app', () => {
     expect(screen.getByLabelText(/当前照片文字/i)).toHaveValue('Line one\nLine two');
   });
 
+  it('defaults to unified text and removes the filename text option', () => {
+    render(<App />);
+
+    expect(screen.queryByRole('button', { name: /文件名/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /统一文字/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText(/统一文字/i)).toHaveValue('请输入文本');
+  });
+
   it('lets Chinese and English caption fonts be selected independently', async () => {
     vi.useFakeTimers();
     render(<App />);
@@ -228,6 +242,35 @@ describe('ColorFrame app', () => {
         template: expect.objectContaining({
           chineseFont: 'system-songti',
           englishFont: 'system-serif',
+        }),
+      }),
+    );
+  });
+
+  it('lets Chinese and English caption sizes be adjusted independently', async () => {
+    vi.useFakeTimers();
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId('photo-upload'), {
+      target: { files: [new File(['image-a'], 'a.png', { type: 'image/png' })] },
+    });
+
+    expect(screen.getByLabelText(/中文字号/i)).toHaveValue(14);
+    expect(screen.getByLabelText(/英文字号/i)).toHaveValue(14);
+
+    fireEvent.change(screen.getByLabelText(/中文字号/i), { target: { value: '18' } });
+    fireEvent.change(screen.getByLabelText(/英文字号/i), { target: { value: '22' } });
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    expect(mocks.renderFramedImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        template: expect.objectContaining({
+          chineseFontSize: 18,
+          englishFontSize: 22,
         }),
       }),
     );
@@ -487,7 +530,10 @@ describe('ColorFrame app', () => {
           frameLayout: 'stacked',
           frameStyle: 'solid',
           topBlockRatio: 7 / 9,
-          textMode: 'filename',
+          textMode: 'custom',
+          customText: '请输入文本',
+          chineseFontSize: 14,
+          englishFontSize: 14,
         }),
       }),
     );
