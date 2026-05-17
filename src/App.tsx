@@ -41,6 +41,13 @@ import {
 const DEFAULT_PALETTE = ['#9f7355', '#335577', '#d9b46f', '#1f2d2b', '#efe1ce'];
 const FIXED_FRAME_COLORS = ['#ffffff', '#000000'];
 const AUTO_GENERATE_DELAY_MS = 500;
+const IMMEDIATE_AUTO_GENERATE_DELAY_MS = 0;
+
+type AutoGenerateRequest = {
+  jobId: string;
+  nonce: number;
+  delayMs: number;
+};
 
 function App() {
   const [jobs, setJobs] = useState<BatchJob[]>([]);
@@ -52,7 +59,7 @@ function App() {
   const [isExporting, setIsExporting] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [message, setMessage] = useState('照片只在浏览器本地处理。');
-  const [autoGenerateRequest, setAutoGenerateRequest] = useState<{ jobId: string; nonce: number } | null>(null);
+  const [autoGenerateRequest, setAutoGenerateRequest] = useState<AutoGenerateRequest | null>(null);
   const [autoProcessBatchRequest, setAutoProcessBatchRequest] = useState<{ jobIds: string[]; nonce: number } | null>(
     null,
   );
@@ -64,6 +71,8 @@ function App() {
   const isAutoGeneratingRef = useRef(false);
   const sourceUrlsRef = useRef<Record<string, string>>({});
   const previewUrlsRef = useRef<Set<string>>(new Set());
+  const queuedAutoGenerateRequestsRef = useRef<Record<string, AutoGenerateRequest>>({});
+  const latestAutoGenerateNonceByJobRef = useRef<Record<string, number>>({});
 
   const summary = useMemo(() => summarizeJobs(jobs), [jobs]);
   const selectedJob = jobs.find((job) => job.id === selectedId) ?? jobs[0];
@@ -109,9 +118,14 @@ function App() {
       return;
     }
 
+    if (autoGenerateRequest.delayMs <= 0) {
+      void autoGenerateJob(autoGenerateRequest.jobId, autoGenerateRequest.nonce);
+      return;
+    }
+
     const timeoutId = window.setTimeout(() => {
-      void autoGenerateJob(autoGenerateRequest.jobId);
-    }, AUTO_GENERATE_DELAY_MS);
+      void autoGenerateJob(autoGenerateRequest.jobId, autoGenerateRequest.nonce);
+    }, autoGenerateRequest.delayMs);
 
     return () => window.clearTimeout(timeoutId);
   }, [autoGenerateRequest]);
@@ -396,18 +410,17 @@ function App() {
       ...selectedPhotoTransform,
       ...nextTransform,
     });
-    revokePreviewUrl(selectedJob.previewUrl);
     setJobs((current) =>
       current.map((job) =>
         job.id === jobId
           ? {
-              ...markJobForRegeneration(job),
+              ...markJobForRegeneration(job, { keepRenderedOutput: true }),
               photoTransform,
             }
           : job,
       ),
     );
-    scheduleAutoGenerate(jobId);
+    scheduleAutoGenerate(jobId, undefined, { delayMs: IMMEDIATE_AUTO_GENERATE_DELAY_MS });
   }
 
   function resetSelectedPhotoTransform() {
@@ -449,20 +462,34 @@ function App() {
     }
   }
 
-  function scheduleAutoGenerate(jobId: string, jobOverride?: BatchJob) {
+  function scheduleAutoGenerate(
+    jobId: string,
+    jobOverride?: BatchJob,
+    options: { delayMs?: number } = {},
+  ) {
     const job = jobOverride ?? jobsRef.current.find((item) => item.id === jobId) ?? selectedJob;
     if (!job || job.status === 'failed') {
       return;
     }
 
     autoGenerateNonceRef.current += 1;
-    setAutoGenerateRequest({ jobId, nonce: autoGenerateNonceRef.current });
-    setMessage('稍后自动生成当前照片。');
+    const request: AutoGenerateRequest = {
+      jobId,
+      nonce: autoGenerateNonceRef.current,
+      delayMs: options.delayMs ?? AUTO_GENERATE_DELAY_MS,
+    };
+    latestAutoGenerateNonceByJobRef.current[jobId] = request.nonce;
+    setAutoGenerateRequest(request);
+    setMessage(request.delayMs <= 0 ? '正在同步生成当前照片。' : '稍后自动生成当前照片。');
   }
 
-  async function autoGenerateJob(jobId: string) {
+  async function autoGenerateJob(jobId: string, requestNonce = autoGenerateNonceRef.current) {
     if (isProcessingRef.current || isAutoGeneratingRef.current) {
-      scheduleAutoGenerate(jobId);
+      queuedAutoGenerateRequestsRef.current[jobId] = {
+        jobId,
+        nonce: latestAutoGenerateNonceByJobRef.current[jobId] ?? autoGenerateNonceRef.current,
+        delayMs: IMMEDIATE_AUTO_GENERATE_DELAY_MS,
+      };
       return;
     }
 
@@ -506,6 +533,12 @@ function App() {
         smartAnalysis: jobBeforeRender.smartAnalysis,
         suggestedText: jobBeforeRender.suggestedText,
       });
+
+      if (requestNonce !== latestAutoGenerateNonceByJobRef.current[jobId]) {
+        URL.revokeObjectURL(result.previewUrl);
+        return;
+      }
+
       previewUrlsRef.current.add(result.previewUrl);
 
       setJobs((current) =>
@@ -531,6 +564,10 @@ function App() {
       );
       setMessage('已自动生成当前照片。');
     } catch (error) {
+      if (requestNonce !== latestAutoGenerateNonceByJobRef.current[jobId]) {
+        return;
+      }
+
       const errorMessage = error instanceof Error ? error.message : '处理失败';
       setJobs((current) =>
         current.map((item) =>
@@ -548,10 +585,27 @@ function App() {
     } finally {
       isAutoGeneratingRef.current = false;
       setIsAutoGenerating(false);
+      const queuedRequest = takeNextQueuedAutoGenerateRequest();
+      if (queuedRequest) {
+        void autoGenerateJob(queuedRequest.jobId, queuedRequest.nonce);
+      }
     }
   }
 
-  function markJobForRegeneration(job: BatchJob): BatchJob {
+  function takeNextQueuedAutoGenerateRequest() {
+    const requests = Object.values(queuedAutoGenerateRequestsRef.current);
+    const request = requests.sort((left, right) => right.nonce - left.nonce)[0];
+    if (request) {
+      delete queuedAutoGenerateRequestsRef.current[request.jobId];
+    }
+
+    return request;
+  }
+
+  function markJobForRegeneration(
+    job: BatchJob,
+    options: { keepRenderedOutput?: boolean } = {},
+  ): BatchJob {
     if (job.status === 'failed') {
       return {
         ...job,
@@ -562,8 +616,8 @@ function App() {
 
     return {
       ...job,
-      outputBlob: undefined,
-      previewUrl: undefined,
+      outputBlob: options.keepRenderedOutput ? job.outputBlob : undefined,
+      previewUrl: options.keepRenderedOutput ? job.previewUrl : undefined,
       status: job.status === 'processing' ? job.status : 'pending',
       progress: job.status === 'processing' ? job.progress : 0,
       errorMessage: undefined,

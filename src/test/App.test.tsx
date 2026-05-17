@@ -571,7 +571,7 @@ describe('ColorFrame app', () => {
     );
   });
 
-  it('auto regenerates the selected photo with composition controls', async () => {
+  it('regenerates the selected photo immediately while composition controls move', async () => {
     vi.useFakeTimers();
     render(<App />);
 
@@ -583,16 +583,273 @@ describe('ColorFrame app', () => {
     fireEvent.change(screen.getByTestId('photo-offset-y-input'), { target: { value: '-40' } });
 
     await act(async () => {
-      vi.advanceTimersByTime(500);
       await Promise.resolve();
     });
 
-    expect(mocks.renderFramedImage).toHaveBeenCalledTimes(1);
-    expect(mocks.renderFramedImage).toHaveBeenCalledWith(
+    expect(mocks.renderFramedImage).toHaveBeenCalled();
+    expect(mocks.renderFramedImage).toHaveBeenLastCalledWith(
       expect.objectContaining({
         photoTransform: { scale: 1.5, offsetX: 25, offsetY: -40 },
       }),
     );
+  });
+
+  it('keeps only the latest composition render when slider changes overlap an active render', async () => {
+    vi.useFakeTimers();
+    let resolveFirstRender: ((value: {
+      blob: Blob;
+      previewUrl: string;
+      theme: Awaited<ReturnType<typeof mocks.analyzeImage>>;
+    }) => void) | undefined;
+    mocks.renderFramedImage.mockImplementationOnce(
+      ({ theme }) =>
+        new Promise((resolve) => {
+          resolveFirstRender = () =>
+            resolve({
+              blob: new Blob(['stale'], { type: 'image/png' }),
+              previewUrl: 'blob:stale-composition',
+              theme,
+            });
+        }),
+    );
+    mocks.renderFramedImage.mockImplementation(async ({ photoTransform, theme }) => ({
+      blob: new Blob([`latest-${photoTransform.offsetX}`], { type: 'image/png' }),
+      previewUrl: `blob:latest-${photoTransform.offsetX}`,
+      theme,
+    }));
+
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId('photo-upload'), {
+      target: { files: [new File(['image-a'], 'a.png', { type: 'image/png' })] },
+    });
+    fireEvent.change(screen.getByTestId('photo-offset-x-input'), { target: { value: '10' } });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.renderFramedImage).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByTestId('photo-offset-x-input'), { target: { value: '40' } });
+    fireEvent.change(screen.getByTestId('photo-offset-x-input'), { target: { value: '70' } });
+
+    await act(async () => {
+      resolveFirstRender?.({
+        blob: new Blob(['stale'], { type: 'image/png' }),
+        previewUrl: 'blob:stale-composition',
+        theme: {
+          dominantColor: '#9f7355',
+          frameColor: '#9f7355',
+          textColor: '#fffaf1',
+          surfaceColor: '#efe1ce',
+          palette: ['#9f7355', '#335577', '#d9b46f'],
+        },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.renderFramedImage).toHaveBeenCalledTimes(2);
+    expect(mocks.renderFramedImage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        photoTransform: { scale: 1, offsetX: 70, offsetY: 0 },
+      }),
+    );
+    expect(screen.getByRole('img', { name: /a\.png/i })).toHaveAttribute('src', 'blob:latest-70');
+  });
+
+  it('ignores stale composition render failures when a newer slider value is queued', async () => {
+    vi.useFakeTimers();
+    let rejectFirstRender: ((reason?: unknown) => void) | undefined;
+    mocks.renderFramedImage.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectFirstRender = reject;
+        }),
+    );
+    mocks.renderFramedImage.mockImplementation(async ({ photoTransform, theme }) => ({
+      blob: new Blob([`latest-${photoTransform.offsetY}`], { type: 'image/png' }),
+      previewUrl: `blob:latest-y-${photoTransform.offsetY}`,
+      theme,
+    }));
+
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId('photo-upload'), {
+      target: { files: [new File(['image-a'], 'a.png', { type: 'image/png' })] },
+    });
+    fireEvent.change(screen.getByTestId('photo-offset-y-input'), { target: { value: '-10' } });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    fireEvent.change(screen.getByTestId('photo-offset-y-input'), { target: { value: '-60' } });
+
+    await act(async () => {
+      rejectFirstRender?.(new Error('stale render failed'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.renderFramedImage).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('img', { name: /a\.png/i })).toHaveAttribute('src', 'blob:latest-y--60');
+    expect(screen.queryByText(/stale render failed/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps an in-flight composition render for one photo when another photo queues a render', async () => {
+    mocks.renderFramedImage.mockImplementation(async ({ file, theme }) => ({
+      blob: new Blob([`initial-${file.name}`], { type: 'image/png' }),
+      previewUrl: `blob:initial-${file.name}`,
+      theme,
+    }));
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId('photo-upload'), {
+      target: {
+        files: [
+          new File(['image-a'], 'a.png', { type: 'image/png' }),
+          new File(['image-b'], 'b.jpg', { type: 'image/jpeg' }),
+        ],
+      },
+    });
+    await waitFor(() => expect(mocks.renderFramedImage).toHaveBeenCalledTimes(2));
+
+    let resolveFirstComposition: ((value: {
+      blob: Blob;
+      previewUrl: string;
+      theme: Awaited<ReturnType<typeof mocks.analyzeImage>>;
+    }) => void) | undefined;
+    mocks.renderFramedImage.mockImplementationOnce(
+      ({ theme }) =>
+        new Promise((resolve) => {
+          resolveFirstComposition = () =>
+            resolve({
+              blob: new Blob(['a-composed'], { type: 'image/png' }),
+              previewUrl: 'blob:a-composed',
+              theme,
+            });
+        }),
+    );
+    mocks.renderFramedImage.mockImplementation(async ({ file, photoTransform, theme }) => ({
+      blob: new Blob([`${file.name}-${photoTransform.offsetX}`], { type: 'image/png' }),
+      previewUrl: `blob:${file.name}-${photoTransform.offsetX}`,
+      theme,
+    }));
+
+    fireEvent.click(screen.getByRole('button', { name: /^a\.png/i }));
+    fireEvent.change(screen.getByTestId('photo-offset-x-input'), { target: { value: '10' } });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.renderFramedImage).toHaveBeenCalledTimes(3);
+
+    fireEvent.click(screen.getByRole('button', { name: /^b\.jpg/i }));
+    fireEvent.change(screen.getByTestId('photo-offset-x-input'), { target: { value: '20' } });
+
+    await act(async () => {
+      resolveFirstComposition?.({
+        blob: new Blob(['a-composed'], { type: 'image/png' }),
+        previewUrl: 'blob:a-composed',
+        theme: {
+          dominantColor: '#9f7355',
+          frameColor: '#9f7355',
+          textColor: '#fffaf1',
+          surfaceColor: '#efe1ce',
+          palette: ['#9f7355', '#335577', '#d9b46f'],
+        },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(mocks.renderFramedImage).toHaveBeenCalledTimes(4));
+
+    fireEvent.click(screen.getByRole('button', { name: /^a\.png/i }));
+
+    expect(screen.getByRole('img', { name: /a\.png/i })).toHaveAttribute('src', 'blob:a-composed');
+  });
+
+  it('keeps queued composition renders for each edited photo', async () => {
+    mocks.renderFramedImage.mockImplementation(async ({ file, theme }) => ({
+      blob: new Blob([`initial-${file.name}`], { type: 'image/png' }),
+      previewUrl: `blob:initial-${file.name}`,
+      theme,
+    }));
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId('photo-upload'), {
+      target: {
+        files: [
+          new File(['image-a'], 'a.png', { type: 'image/png' }),
+          new File(['image-b'], 'b.jpg', { type: 'image/jpeg' }),
+        ],
+      },
+    });
+    await waitFor(() => expect(mocks.renderFramedImage).toHaveBeenCalledTimes(2));
+
+    let resolveActiveRender: ((value: {
+      blob: Blob;
+      previewUrl: string;
+      theme: Awaited<ReturnType<typeof mocks.analyzeImage>>;
+    }) => void) | undefined;
+    mocks.renderFramedImage.mockImplementationOnce(
+      ({ theme }) =>
+        new Promise((resolve) => {
+          resolveActiveRender = () =>
+            resolve({
+              blob: new Blob(['a-first'], { type: 'image/png' }),
+              previewUrl: 'blob:a-first',
+              theme,
+            });
+        }),
+    );
+    mocks.renderFramedImage.mockImplementation(async ({ file, photoTransform, theme }) => ({
+      blob: new Blob([`${file.name}-${photoTransform.offsetX}`], { type: 'image/png' }),
+      previewUrl: `blob:${file.name}-${photoTransform.offsetX}`,
+      theme,
+    }));
+
+    fireEvent.click(screen.getByRole('button', { name: /^a\.png/i }));
+    fireEvent.change(screen.getByTestId('photo-offset-x-input'), { target: { value: '10' } });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^b\.jpg/i }));
+    fireEvent.change(screen.getByTestId('photo-offset-x-input'), { target: { value: '20' } });
+    fireEvent.click(screen.getByRole('button', { name: /^a\.png/i }));
+    fireEvent.change(screen.getByTestId('photo-offset-x-input'), { target: { value: '30' } });
+
+    await act(async () => {
+      resolveActiveRender?.({
+        blob: new Blob(['a-first'], { type: 'image/png' }),
+        previewUrl: 'blob:a-first',
+        theme: {
+          dominantColor: '#9f7355',
+          frameColor: '#9f7355',
+          textColor: '#fffaf1',
+          surfaceColor: '#efe1ce',
+          palette: ['#9f7355', '#335577', '#d9b46f'],
+        },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(mocks.renderFramedImage).toHaveBeenCalledTimes(5));
+
+    fireEvent.click(screen.getByRole('button', { name: /^a\.png/i }));
+    expect(screen.getByRole('img', { name: /a\.png/i })).toHaveAttribute('src', 'blob:a.png-30');
+
+    fireEvent.click(screen.getByRole('button', { name: /^b\.jpg/i }));
+    expect(screen.getByRole('img', { name: /b\.jpg/i })).toHaveAttribute('src', 'blob:b.jpg-20');
   });
 
   it('keeps composition settings local to the selected photo and resets them', async () => {
