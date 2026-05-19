@@ -12,8 +12,8 @@ export function createDefaultTemplate(): FrameTemplate {
     textPosition: 'bottom',
     chineseFont: 'zhuque-fangsong',
     englishFont: 'isenheim',
-    chineseFontSize: 14,
-    englishFontSize: 14,
+    chineseFontSize: 30,
+    englishFontSize: 30,
     exportFormat: 'png',
     exportQuality: 0.92,
   };

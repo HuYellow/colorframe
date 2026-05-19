@@ -117,8 +117,8 @@ describe('ColorFrame app', () => {
           topBlockRatio: 7 / 9,
           textMode: 'custom',
           customText: '请输入文本',
-          chineseFontSize: 14,
-          englishFontSize: 14,
+          chineseFontSize: 30,
+          englishFontSize: 30,
         }),
       }),
     );
@@ -132,8 +132,8 @@ describe('ColorFrame app', () => {
           topBlockRatio: 7 / 9,
           textMode: 'custom',
           customText: '请输入文本',
-          chineseFontSize: 14,
-          englishFontSize: 14,
+          chineseFontSize: 30,
+          englishFontSize: 30,
         }),
       }),
     );
@@ -247,7 +247,7 @@ describe('ColorFrame app', () => {
     );
   });
 
-  it('lets Chinese and English caption sizes be adjusted independently', async () => {
+  it('lets Chinese and English caption sizes be selected independently', async () => {
     vi.useFakeTimers();
     render(<App />);
 
@@ -255,14 +255,20 @@ describe('ColorFrame app', () => {
       target: { files: [new File(['image-a'], 'a.png', { type: 'image/png' })] },
     });
 
-    expect(screen.getByLabelText(/中文字号/i)).toHaveValue(14);
-    expect(screen.getByLabelText(/英文字号/i)).toHaveValue(14);
+    const chineseSizeSelect = screen.getByTestId('chinese-font-size-input');
+    const englishSizeSelect = screen.getByTestId('english-font-size-input');
 
-    fireEvent.change(screen.getByLabelText(/中文字号/i), { target: { value: '18' } });
-    fireEvent.change(screen.getByLabelText(/英文字号/i), { target: { value: '22' } });
+    expect(chineseSizeSelect.tagName).toBe('SELECT');
+    expect(englishSizeSelect.tagName).toBe('SELECT');
+    expect(chineseSizeSelect).toHaveValue('30');
+    expect(englishSizeSelect).toHaveValue('30');
+    expect(Array.from((chineseSizeSelect as HTMLSelectElement).options).map((option) => option.value)).toContain('10');
+    expect(Array.from((chineseSizeSelect as HTMLSelectElement).options).map((option) => option.value)).toContain('100');
+
+    fireEvent.change(chineseSizeSelect, { target: { value: '18' } });
+    fireEvent.change(englishSizeSelect, { target: { value: '22' } });
 
     await act(async () => {
-      vi.advanceTimersByTime(500);
       await Promise.resolve();
     });
 
@@ -271,6 +277,44 @@ describe('ColorFrame app', () => {
         template: expect.objectContaining({
           chineseFontSize: 18,
           englishFontSize: 22,
+        }),
+      }),
+    );
+  });
+
+  it('re-renders font size changes immediately without recalculating the palette', async () => {
+    vi.useFakeTimers();
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId('photo-upload'), {
+      target: { files: [new File(['image-a'], 'a.png', { type: 'image/png' })] },
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    expect(mocks.analyzeImage).toHaveBeenCalledTimes(1);
+    mocks.renderFramedImage.mockClear();
+
+    fireEvent.change(screen.getByTestId('chinese-font-size-input'), { target: { value: '44' } });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.analyzeImage).toHaveBeenCalledTimes(1);
+    expect(mocks.renderFramedImage).toHaveBeenCalledTimes(1);
+    expect(mocks.renderFramedImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: expect.objectContaining({
+          frameColor: '#9f7355',
+          palette: ['#9f7355', '#335577', '#d9b46f'],
+        }),
+        template: expect.objectContaining({
+          chineseFontSize: 44,
+          englishFontSize: 30,
         }),
       }),
     );
@@ -532,8 +576,8 @@ describe('ColorFrame app', () => {
           topBlockRatio: 7 / 9,
           textMode: 'custom',
           customText: '请输入文本',
-          chineseFontSize: 14,
-          englishFontSize: 14,
+          chineseFontSize: 30,
+          englishFontSize: 30,
         }),
       }),
     );

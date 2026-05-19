@@ -42,8 +42,13 @@ const DEFAULT_PALETTE = ['#9f7355', '#335577', '#d9b46f', '#1f2d2b', '#efe1ce'];
 const FIXED_FRAME_COLORS = ['#ffffff', '#000000'];
 const AUTO_GENERATE_DELAY_MS = 500;
 const IMMEDIATE_AUTO_GENERATE_DELAY_MS = 0;
-const CAPTION_FONT_SIZE_MIN = 8;
-const CAPTION_FONT_SIZE_MAX = 72;
+const CAPTION_FONT_SIZE_MIN = 10;
+const CAPTION_FONT_SIZE_MAX = 100;
+const CAPTION_FONT_SIZE_DEFAULT = 30;
+const CAPTION_FONT_SIZE_OPTIONS = Array.from(
+  { length: CAPTION_FONT_SIZE_MAX - CAPTION_FONT_SIZE_MIN + 1 },
+  (_, index) => CAPTION_FONT_SIZE_MIN + index,
+);
 
 type AutoGenerateRequest = {
   jobId: string;
@@ -232,7 +237,7 @@ function App() {
         setJobs((current) =>
           current.map((item) =>
             item.id === job.id
-              ? { ...item, themeColor: theme.frameColor, palette: theme.palette, progress: 54 }
+              ? { ...item, theme, themeColor: theme.frameColor, palette: theme.palette, progress: 54 }
               : item,
           ),
         );
@@ -259,6 +264,7 @@ function App() {
                   progress: 100,
                   outputBlob: result.blob,
                   previewUrl: result.previewUrl,
+                  theme: result.theme,
                   themeColor: result.theme.frameColor,
                   palette: result.theme.palette,
                 }
@@ -366,6 +372,9 @@ function App() {
           ? {
               ...markJobForRegeneration(job),
               selectedFrameColor,
+              theme: job.theme
+                ? createThemeWithFrameColor(job.theme.dominantColor, job.theme.palette, selectedFrameColor)
+                : job.theme,
               themeColor: selectedFrameColor,
             }
           : job,
@@ -458,16 +467,24 @@ function App() {
     setMessage('已将当前边框设置应用到其他照片，色框颜色保持不变。');
   }
 
-  function updateTemplate(nextTemplate: FrameTemplate) {
+  function updateTemplate(
+    nextTemplate: FrameTemplate,
+    options: { delayMs?: number; keepRenderedOutput?: boolean } = {},
+  ) {
     const jobId = selectedJob?.id;
-    revokeAllPreviewUrls();
+    if (!options.keepRenderedOutput) {
+      revokeAllPreviewUrls();
+    }
+    templateRef.current = nextTemplate;
     setTemplate(nextTemplate);
     setJobs((current) =>
-      current.map((job) => (job.status === 'failed' ? job : markJobForRegeneration(job))),
+      current.map((job) =>
+        job.status === 'failed' ? job : markJobForRegeneration(job, { keepRenderedOutput: options.keepRenderedOutput }),
+      ),
     );
 
     if (jobId) {
-      scheduleAutoGenerate(jobId);
+      scheduleAutoGenerate(jobId, undefined, { delayMs: options.delayMs });
     }
   }
 
@@ -518,16 +535,11 @@ function App() {
         ),
       );
 
-      const analyzedTheme = await analyzeImage(job.file);
-      const jobAfterAnalysis = jobsRef.current.find((item) => item.id === jobId) ?? job;
-      const theme = createThemeWithFrameColor(
-        analyzedTheme.dominantColor,
-        analyzedTheme.palette,
-        jobAfterAnalysis.selectedFrameColor,
-      );
+      const currentJob = jobsRef.current.find((item) => item.id === jobId) ?? job;
+      const theme = await resolveRenderTheme(currentJob);
       setJobs((current) =>
         current.map((item) =>
-          item.id === jobId ? { ...item, themeColor: theme.frameColor, palette: theme.palette, progress: 54 } : item,
+          item.id === jobId ? { ...item, theme, themeColor: theme.frameColor, palette: theme.palette, progress: 54 } : item,
         ),
       );
 
@@ -566,6 +578,7 @@ function App() {
             progress: 100,
             outputBlob: result.blob,
             previewUrl: result.previewUrl,
+            theme: result.theme,
             themeColor: result.theme.frameColor,
             palette: result.theme.palette,
           };
@@ -599,6 +612,17 @@ function App() {
         void autoGenerateJob(queuedRequest.jobId, queuedRequest.nonce);
       }
     }
+  }
+
+  async function resolveRenderTheme(job: BatchJob) {
+    if (job.theme) {
+      return job.selectedFrameColor
+        ? createThemeWithFrameColor(job.theme.dominantColor, job.theme.palette, job.selectedFrameColor)
+        : job.theme;
+    }
+
+    const analyzedTheme = await analyzeImage(job.file);
+    return createThemeWithFrameColor(analyzedTheme.dominantColor, analyzedTheme.palette, job.selectedFrameColor);
   }
 
   function takeNextQueuedAutoGenerateRequest() {
@@ -926,7 +950,7 @@ function TemplateControls({
   photoTransform: PhotoTransform;
   selectedJob?: BatchJob;
   template: FrameTemplate;
-  onChange: (template: FrameTemplate) => void;
+  onChange: (template: FrameTemplate, options?: { delayMs?: number; keepRenderedOutput?: boolean }) => void;
   onApplyFrameSettingsToAll: () => void;
   onFrameColorChange: (color: string) => void;
   onFrameSettingsChange: (settings: Partial<PhotoFrameSettings>) => void;
@@ -1162,17 +1186,24 @@ function TemplateControls({
 
         <label className="field">
           <span>中文字号</span>
-          <input
+          <select
             aria-label="中文字号"
             data-testid="chinese-font-size-input"
-            max={CAPTION_FONT_SIZE_MAX}
-            min={CAPTION_FONT_SIZE_MIN}
-            type="number"
             value={template.chineseFontSize}
             onChange={(event) =>
-              onChange({ ...template, chineseFontSize: normalizeCaptionFontSize(event.target.value) })
+              onChange(
+                { ...template, chineseFontSize: normalizeCaptionFontSize(event.target.value) },
+                { delayMs: IMMEDIATE_AUTO_GENERATE_DELAY_MS, keepRenderedOutput: true },
+              )
             }
-          />
+          >
+            {CAPTION_FONT_SIZE_OPTIONS.map((fontSize) => (
+              <option key={fontSize} value={fontSize}>
+                {fontSize} px
+              </option>
+            ))}
+          </select>
+          <small>10-100 px，选择后立即更新当前预览。</small>
         </label>
 
         <label className="field">
@@ -1195,17 +1226,24 @@ function TemplateControls({
 
         <label className="field">
           <span>英文字号</span>
-          <input
+          <select
             aria-label="英文字号"
             data-testid="english-font-size-input"
-            max={CAPTION_FONT_SIZE_MAX}
-            min={CAPTION_FONT_SIZE_MIN}
-            type="number"
             value={template.englishFontSize}
             onChange={(event) =>
-              onChange({ ...template, englishFontSize: normalizeCaptionFontSize(event.target.value) })
+              onChange(
+                { ...template, englishFontSize: normalizeCaptionFontSize(event.target.value) },
+                { delayMs: IMMEDIATE_AUTO_GENERATE_DELAY_MS, keepRenderedOutput: true },
+              )
             }
-          />
+          >
+            {CAPTION_FONT_SIZE_OPTIONS.map((fontSize) => (
+              <option key={fontSize} value={fontSize}>
+                {fontSize} px
+              </option>
+            ))}
+          </select>
+          <small>10-100 px，选择后立即更新当前预览。</small>
         </label>
       </div>
 
@@ -1271,7 +1309,7 @@ function TemplateControls({
 function normalizeCaptionFontSize(value: string): number {
   const fontSize = Number(value);
   if (!Number.isFinite(fontSize)) {
-    return 14;
+    return CAPTION_FONT_SIZE_DEFAULT;
   }
 
   return Math.min(CAPTION_FONT_SIZE_MAX, Math.max(CAPTION_FONT_SIZE_MIN, Math.round(fontSize)));

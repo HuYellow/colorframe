@@ -88,6 +88,7 @@ export type BatchJob = {
   frameSettings?: PhotoFrameSettings;
   photoTransform?: PhotoTransform;
   selectedFrameColor?: string;
+  theme?: ColorTheme;
   themeColor?: string;
   palette?: string[];
   outputBlob?: Blob;

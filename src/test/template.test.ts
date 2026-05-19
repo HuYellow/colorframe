@@ -12,8 +12,8 @@ describe('template utilities', () => {
     expect(template.topBlockRatio).toBe(7 / 9);
     expect(template.chineseFont).toBe('zhuque-fangsong');
     expect(template.englishFont).toBe('isenheim');
-    expect(template.chineseFontSize).toBe(14);
-    expect(template.englishFontSize).toBe(14);
+    expect(template.chineseFontSize).toBe(30);
+    expect(template.englishFontSize).toBe(30);
     expect(getTemplateText(template, 'Summer Trip.JPG')).toBe('请输入文本');
   });
 
